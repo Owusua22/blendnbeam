@@ -247,3 +247,40 @@ export const clearCart = async (token) => {
   return data;
 };
 
+// ---------------- SHIPPING ----------------
+// Get all shipping zones (optional filters via query object)
+export const getShippingList = async (filters = {}) => {
+  const params = new URLSearchParams(filters).toString();
+  const { data } = await axios.get(`${API_URL}/shipping?${params}`);
+  return data;
+};
+
+// Get single shipping zone by id
+export const getShippingById = async (id) => {
+  const { data } = await axios.get(`${API_URL}/shipping/${id}`);
+  return data;
+};
+
+// Create a shipping zone (admin)
+export const createShipping = async (shippingData, token) => {
+  const { data } = await axios.post(`${API_URL}/shipping`, shippingData, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return data;
+};
+
+// Update a shipping zone (admin)
+export const updateShipping = async (id, shippingData, token) => {
+  const { data } = await axios.put(`${API_URL}/shipping/${id}`, shippingData, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return data;
+};
+
+// Delete a shipping zone (admin)
+export const deleteShipping = async (id, token) => {
+  const { data } = await axios.delete(`${API_URL}/shipping/${id}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return data;
+};

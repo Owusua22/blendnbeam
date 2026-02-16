@@ -5,7 +5,8 @@ const Product = require('../models/Product');
 const getCart = async (req, res) => {
   try {
     const cart = await Cart.findOne({ user: req.user.id })
-      .populate({ path: "items.product", select: "name price images color size" });
+      .populate({ path: "items.product", select: "name price images color variants sku" })
+      .populate({ path: "items.variant" });
 
     if (!cart) {
       return res.status(404).json({ message: "Cart not found" });
@@ -20,12 +21,45 @@ const getCart = async (req, res) => {
 // ===================== ADD TO CART ===================== //
 const addToCart = async (req, res) => {
   try {
-    const { productId, quantity = 1, color, size } = req.body;
+    const { productId, quantity = 1, color, size, variantId } = req.body;
 
     if (!productId) return res.status(400).json({ message: "productId is required" });
 
     const product = await Product.findById(productId);
     if (!product) return res.status(404).json({ message: "Product not found" });
+
+    // Determine variant by variantId or by size (if product has variants)
+    let selectedVariant = null;
+    if (product.variants && product.variants.length > 0) {
+      if (variantId) {
+        selectedVariant = product.variants.find(v => v._id.toString() === variantId.toString());
+      } else if (size) {
+        selectedVariant = product.variants.find(v => String(v.size) === String(size));
+      }
+    }
+
+    // If variant is present, validate stock
+    if (selectedVariant) {
+      if ((selectedVariant.stock || 0) === 0) {
+        return res.status(400).json({ message: "Selected size is out of stock" });
+      }
+      if (quantity > (selectedVariant.stock || 0)) {
+        return res.status(400).json({ message: `Only ${selectedVariant.stock} items available for the selected size` });
+      }
+    } else {
+      // No variant selected - validate product stock if available
+      if (product.stock !== undefined && product.stock !== null) {
+        if (product.stock === 0) {
+          return res.status(400).json({ message: "Product is out of stock" });
+        }
+        if (quantity > product.stock) {
+          return res.status(400).json({ message: `Only ${product.stock} items available` });
+        }
+      }
+    }
+
+    // Choose price authoritative on server side
+    const unitPrice = selectedVariant?.price ?? product.price;
 
     let cart = await Cart.findOne({ user: req.user.id });
 
@@ -37,35 +71,62 @@ const addToCart = async (req, res) => {
           product: productId,
           name: product.name,
           image: product.images[0]?.url || '',
-        price: req.body.price ?? product.price,
-
+          price: unitPrice,
+          sizePrice: selectedVariant ? selectedVariant.price : undefined,
+          variant: selectedVariant ? selectedVariant._id : undefined,
           quantity,
           color: color || null,
-          size: size || null
+          size: size || (selectedVariant ? selectedVariant.size : null)
         }]
       });
     } else {
-      // Check if same product/color/size exists
+      // Check if same product/color/size exists (variant-aware matching)
       const index = cart.items.findIndex(
         (item) =>
           item.product.toString() === productId.toString() &&
           item.color === (color || null) &&
-          item.size === (size || null)
+          item.size === (size || (selectedVariant ? selectedVariant.size : null))
       );
 
       if (index > -1) {
-        // Update quantity
-        cart.items[index].quantity += quantity;
+        // Update quantity, but re-validate against variant/product stock
+        const existingItem = cart.items[index];
+        const newQuantity = existingItem.quantity + quantity;
+
+        // If existing item references a variant, verify variant stock
+        if (existingItem.variant) {
+          const variantInProduct = product.variants.find(v => v._id.toString() === existingItem.variant.toString());
+          const available = variantInProduct?.stock ?? 0;
+          if (newQuantity > available) {
+            return res.status(400).json({ message: `Only ${available} items available for the selected size` });
+          }
+        } else {
+          // product-level stock
+          if (product.stock !== undefined && newQuantity > product.stock) {
+            return res.status(400).json({ message: `Only ${product.stock} items available` });
+          }
+        }
+
+        existingItem.quantity = newQuantity;
+
+        // Ensure the stored price aligns with authoritative price
+        existingItem.price = unitPrice;
+        if (selectedVariant) {
+          existingItem.sizePrice = selectedVariant.price;
+          existingItem.variant = selectedVariant._id;
+        }
       } else {
         // Add new item
         cart.items.push({
           product: productId,
           name: product.name,
           image: product.images[0]?.url || '',
-          price: product.price,
+          price: unitPrice,
+          sizePrice: selectedVariant ? selectedVariant.price : undefined,
+          variant: selectedVariant ? selectedVariant._id : undefined,
           quantity,
           color: color || null,
-          size: size || null
+          size: size || (selectedVariant ? selectedVariant.size : null)
         });
       }
     }
@@ -73,7 +134,8 @@ const addToCart = async (req, res) => {
     await calculateCartTotal(cart);
     await cart.save();
 
-    await cart.populate({ path: "items.product", select: "name price images color size" });
+    await cart.populate({ path: "items.product", select: "name price images color variants sku" });
+    await cart.populate({ path: "items.variant" });
 
     res.status(201).json(cart);
 
@@ -97,15 +159,34 @@ const updateCartItem = async (req, res) => {
     const item = cart.items.id(itemId);
     if (!item) return res.status(404).json({ message: "Item not found" });
 
-    // Update quantity and price
-    item.quantity = quantity;
+    // Validate against product/variant stock
     const product = await Product.findById(item.product);
-    if (product) item.price = product.price;
+    if (!product) return res.status(404).json({ message: "Product not found for cart item" });
+
+    if (item.variant) {
+      const variant = product.variants.find(v => v._id.toString() === item.variant.toString());
+      const available = variant?.stock ?? 0;
+      if (quantity > available) {
+        return res.status(400).json({ message: `Only ${available} items available for the selected size` });
+      }
+      // Ensure prices remain authoritative
+      item.price = variant?.price ?? product.price;
+      item.sizePrice = variant?.price;
+    } else {
+      if (product.stock !== undefined && quantity > product.stock) {
+        return res.status(400).json({ message: `Only ${product.stock} items available` });
+      }
+      item.price = product.price;
+      item.sizePrice = undefined;
+    }
+
+    item.quantity = quantity;
 
     await calculateCartTotal(cart);
     await cart.save();
 
-    await cart.populate({ path: "items.product", select: "name price images color size" });
+    await cart.populate({ path: "items.product", select: "name price images color variants sku" });
+    await cart.populate({ path: "items.variant" });
 
     res.json(cart);
   } catch (error) {
@@ -132,7 +213,8 @@ const removeFromCart = async (req, res) => {
     await calculateCartTotal(cart);
     await cart.save();
 
-    await cart.populate({ path: "items.product", select: "name price images color size" });
+    await cart.populate({ path: "items.product", select: "name price images color variants sku" });
+    await cart.populate({ path: "items.variant" });
 
     res.json(cart);
   } catch (error) {
@@ -157,15 +239,35 @@ const clearCart = async (req, res) => {
 
 // ===================== HELPER - CALCULATE TOTAL ===================== //
 const calculateCartTotal = async (cart) => {
-  let total = 0;
+  let itemsPrice = 0;
   for (let item of cart.items) {
-    if (!item.price) {
+    // Ensure item.price exists and is authoritative
+    if (item.variant) {
+      // If variant is referenced, try to pull latest price from product record (optional)
       const product = await Product.findById(item.product);
-      if (product) item.price = product.price;
+      const variant = product?.variants?.find(v => v._id.toString() === item.variant.toString());
+      if (variant && (variant.price !== undefined && variant.price !== null)) {
+        item.price = variant.price;
+        item.sizePrice = variant.price;
+      } else if (product) {
+        item.price = product.price;
+        item.sizePrice = undefined;
+      }
+    } else {
+      if (!item.price) {
+        const product = await Product.findById(item.product);
+        if (product) item.price = product.price;
+      }
     }
-    total += item.price * item.quantity;
+
+    itemsPrice += (Number(item.price) || 0) * (Number(item.quantity) || 0);
   }
-  cart.totalAmount = total;
+
+  cart.itemsPrice = itemsPrice;
+  const shipping = Number(cart.shippingPrice) || 0;
+  const tax = Number(cart.taxPrice) || 0;
+  cart.totalAmount = itemsPrice + shipping + tax;
+
   return cart;
 };
 

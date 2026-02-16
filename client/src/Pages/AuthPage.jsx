@@ -6,7 +6,7 @@ import { register, login } from "../Redux/slice/authSlice";
 const { Title } = Typography;
 const { TabPane } = Tabs;
 
-const AuthModal = ({ open, onClose, defaultTab = "login" }) => {
+const AuthModal = ({ open, onClose, defaultTab = "register" }) => {
   const dispatch = useDispatch();
   const { userInfo, loading, error } = useSelector((state) => state.auth);
 

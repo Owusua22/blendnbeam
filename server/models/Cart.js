@@ -4,7 +4,12 @@ const cartItemSchema = new mongoose.Schema({
   product: { type: mongoose.Schema.Types.ObjectId, ref: 'Product', required: true },
   name: String,
   image: String,
+  // unit price for this cart item (reflects variant price when a size is selected)
   price: Number,
+  // explicit size price field (keeps semantics clear on the model)
+  sizePrice: { type: Number },
+  // store which variant was chosen (if your Product variants have their own IDs)
+  variant: { type: mongoose.Schema.Types.ObjectId },
   quantity: { type: Number, required: true, min: 1 },
   color: String,
   size: String,

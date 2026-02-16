@@ -11,7 +11,7 @@ import {
 
 // Fetch all categories
 export const fetchCategories = createAsyncThunk(
-  "categories/fetchAll",
+  "categories/fetchAll", 
   async (_, { rejectWithValue }) => {
     try {
       const data = await getCategories();

@@ -1,26 +1,23 @@
-import React, { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+// src/Component/NewArrivals.jsx
+import React, { useEffect, useMemo, useState } from "react";
 import {
   Card,
   Tag,
   Image,
   Button,
   Typography,
-  message,
   Tooltip,
 } from "antd";
-import { Eye, Heart, Package, TrendingUp } from "lucide-react";
+import { Eye, Package, TrendingUp } from "lucide-react";
 import { useDispatch, useSelector } from "react-redux";
+import { useNavigate } from "react-router-dom";
+import { fetchProducts } from "../Redux/slice/productSlice";
 
-import { fetchProductsByShowroom } from "../Redux/slice/productSlice";
-import { fetchShowrooms } from "../Redux/slice/showroomSlice";
-import { addItemToCart } from "../Redux/slice/cartSlice";
+const { Title, Text } = Typography;
 
-const { Text, Title } = Typography;
+const MAX_ITEMS = 12; // how many "new arrivals" to show
 
-// ========================
-//   THEME & INLINE STYLES
-// ========================
+// THEME (same family as Chairs)
 const theme = {
   
   borderSubtle: "rgba(15,23,42,0.06)",
@@ -36,8 +33,8 @@ const theme = {
   danger: "#ef4444",
 };
 
+// STYLES (aligned with Chairs)
 const styles = {
-  // Page
   page: {
     background: theme.pageBg,
     padding: "8px 0 16px",
@@ -52,10 +49,6 @@ const styles = {
     padding: "0 8px",
   },
 
-  // Section
-  section: {
-    marginBottom: 14,
-  },
   sectionHeader: {
     display: "flex",
     alignItems: "flex-end",
@@ -69,6 +62,7 @@ const styles = {
     letterSpacing: "0.03em",
     fontSize: 17,
     color: theme.brandPrimary,
+    textTransform: "uppercase",
   },
   sectionAccentBar: {
     width: 70,
@@ -78,57 +72,18 @@ const styles = {
     boxShadow: "0 4px 10px rgba(34,197,94,0.35)",
     marginBottom: 10,
   },
-  sectionAccentBarSkeleton: {
-    width: 70,
-    height: 3,
-    borderRadius: 999,
-    backgroundColor: "#e5e7eb",
-    marginBottom: 10,
-  },
-
-  // Loading skeleton (section)
-  loadingRoot: {
-    display: "flex",
-    flexDirection: "column",
-    gap: 18,
-  },
-  sectionHeaderRow: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 6,
-  },
-  skeletonTitleGroup: {
-    display: "flex",
-    flexDirection: "column",
-    gap: 4,
-  },
-  skeletonTitle: {
-    width: 160,
-    height: 18,
-    borderRadius: 999,
-    backgroundColor: "#e5e7eb",
-  },
-  skeletonPill: {
-    width: 54,
-    height: 16,
-    borderRadius: 999,
-    backgroundColor: "#e5e7eb",
-  },
-
-  // Grid (base)
   productsGrid: {
     display: "grid",
     gap: 14,
     alignItems: "stretch",
   },
-
-  // Product card
   productCardBase: {
     borderRadius: 18,
     overflow: "hidden",
     background: "rgba(255,255,255,0.96)",
-    border: `1px solid ${theme.borderSubtle}`,
+    borderWidth: 1,
+    borderStyle: "solid",
+    borderColor: theme.borderSubtle,
     boxShadow: theme.shadowSoft,
     cursor: "pointer",
     transition:
@@ -146,8 +101,6 @@ const styles = {
     flexDirection: "column",
     height: "100%",
   },
-
-  // Product skeleton
   productCardSkeleton: {
     cursor: "default",
     pointerEvents: "none",
@@ -191,13 +144,9 @@ const styles = {
     borderRadius: 999,
     backgroundColor: "#e5e7eb",
   },
-
-  // Media
   productMediaOuter: {
- 
     borderRadius: 16,
     padding: 4,
-   
   },
   productMediaInner: {
     position: "relative",
@@ -213,10 +162,7 @@ const styles = {
     alignItems: "center",
     justifyContent: "center",
     color: "#9ca3af",
-    
   },
-
-  // Badges
   mediaBadgesRow: {
     position: "absolute",
     top: 6,
@@ -245,33 +191,10 @@ const styles = {
     color: "#ef4444",
   },
   badgeVariants: {
-    background: "#fef9c3", // soft yellow
-    color: "#65a30d", // lime green
+    background: "#fef9c3",
+    color: "#65a30d",
     marginLeft: "auto",
   },
-
-  // Wishlist
-  wishlistButton: {
-    position: "absolute",
-    bottom: 6,
-    right: 6,
-    width: 26,
-    height: 26,
-    borderRadius: 999,
-    border: "none",
-   
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    boxShadow: "0 7px 18px rgba(15,23,42,0.14)",
-    backdropFilter: "blur(10px)",
-    padding: 0,
-  },
-  wishlistIcon: {
-    transition: "color 0.18s ease, transform 0.18s ease",
-  },
-
-  // Out of stock
   outOfStockOverlay: {
     position: "absolute",
     inset: 0,
@@ -291,8 +214,6 @@ const styles = {
     letterSpacing: "0.08em",
     textTransform: "uppercase",
   },
-
-  // Product body
   productBody: {
     display: "flex",
     flexDirection: "column",
@@ -314,8 +235,6 @@ const styles = {
   productTitleHovered: {
     color: theme.success,
   },
-
-  // Price
   priceRow: {
     display: "flex",
     alignItems: "flex-end",
@@ -339,10 +258,8 @@ const styles = {
   },
   lowStock: {
     fontSize: 11,
-    color: theme.danger,
+    color: "#ef4444",
   },
-
-  // Variant info
   variantInfo: {
     display: "inline-flex",
     alignItems: "center",
@@ -354,16 +271,12 @@ const styles = {
     background: "#fefce8",
     marginTop: 1,
   },
-
-  // Actions
   actions: {
     marginTop: 4,
     display: "flex",
     flexDirection: "column",
     gap: 4,
   },
-
-  // Single CTA (View details) – green/yellow gradient
   ctaButton: {
     width: "100%",
     height: 34,
@@ -380,8 +293,6 @@ const styles = {
     transition:
       "background 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease",
   },
-
-  // Empty state
   emptyCard: {
     borderRadius: 18,
     border: "1px dashed rgba(148,163,184,0.55)",
@@ -406,15 +317,8 @@ const styles = {
   },
 };
 
-// ========================
-//   RESPONSIVE GRID HOOK
-// ========================
-
+// RESPONSIVE GRID
 const getColumnCount = (width) => {
-  // Adjust breakpoints as needed:
-  // < 640px: 2 cols (small)
-  // 640–1023px: 4 cols (medium)
-  // >= 1024px: 6 cols (large)
   if (width < 640) return 2;
   if (width < 1024) return 4;
   return 6;
@@ -428,48 +332,45 @@ const useResponsiveColumns = () => {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-
-    const handleResize = () => {
-      setColumns(getColumnCount(window.innerWidth));
-    };
-
-    window.addEventListener("resize", handleResize);
-    return () => window.removeEventListener("resize", handleResize);
+    const handler = () => setColumns(getColumnCount(window.innerWidth));
+    window.addEventListener("resize", handler);
+    return () => window.removeEventListener("resize", handler);
   }, []);
 
   return columns;
 };
 
-// ========================
-//   LOGIC HELPERS
-// ========================
+// HELPERS
+const formatMoney = (value) =>
+  Number(value || 0).toLocaleString("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
 
 const getPriceDisplay = (product) => {
   if (product.variants && product.variants.length > 0) {
-    const prices = product.variants.map((v) => v.price || 0);
+    const prices = product.variants.map((v) => Number(v.price || 0));
     const minPrice = Math.min(...prices);
     const maxPrice = Math.max(...prices);
 
     if (minPrice === maxPrice) {
       return {
-        display: `₵${minPrice.toFixed(2)}`,
+        display: `₵${formatMoney(minPrice)}`,
         isRange: false,
         min: minPrice,
         max: maxPrice,
       };
     }
-
     return {
-      display: `₵${minPrice.toFixed(2)} - ₵${maxPrice.toFixed(2)}`,
+      display: `₵${formatMoney(minPrice)} - ₵${formatMoney(maxPrice)}`,
       isRange: true,
       min: minPrice,
       max: maxPrice,
     };
   }
-
-  const price = product.price || 0;
+  const price = Number(product.price || 0);
   return {
-    display: `₵${price.toFixed(2)}`,
+    display: `₵${formatMoney(price)}`,
     isRange: false,
     min: price,
     max: price,
@@ -485,7 +386,7 @@ const getStockCount = (product) => {
 
 const isProductActive = (product) => {
   const stock = getStockCount(product);
-  return product.isActive && stock > 0;
+  return (product.isActive ?? true) && stock > 0;
 };
 
 const calcDiscount = (price, oldPrice) => {
@@ -493,87 +394,7 @@ const calcDiscount = (price, oldPrice) => {
   return Math.round(((oldPrice - price) / oldPrice) * 100);
 };
 
-// ========================
-//   MAIN COMPONENT
-// ========================
-
-const ProductsByShowroom = () => {
-  const dispatch = useDispatch();
-  const navigate = useNavigate();
-
-  const { items: showrooms = [], loading: loadingShowrooms } = useSelector(
-    (state) => state.showrooms
-  );
-
-  useEffect(() => {
-    dispatch(fetchShowrooms());
-  }, [dispatch]);
-
-  const handleViewProduct = (productId) => navigate(`/product/${productId}`);
-
-  return (
-    <div style={styles.page}>
-      <div style={styles.pageInner}>
-        {loadingShowrooms ? (
-          <LoadingShowrooms />
-        ) : (
-          showrooms.map((showroom) => (
-            <section key={showroom._id} style={styles.section}>
-              <header style={styles.sectionHeader}>
-                <Title level={4} style={styles.sectionTitle}>
-                  {showroom.name}
-                </Title>
-              </header>
-              <div style={styles.sectionAccentBar} />
-              <ShowroomProducts
-                showroomId={showroom._id}
-                onView={handleViewProduct}
-              />
-            </section>
-          ))
-        )}
-      </div>
-    </div>
-  );
-};
-
-// ========================
-//   LOADING PLACEHOLDER
-// ========================
-
-const LoadingShowrooms = () => {
-  const columns = useResponsiveColumns();
-  const gridStyle = {
-    ...styles.productsGrid,
-    gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`,
-  };
-
-  return (
-    <div style={styles.loadingRoot}>
-      {Array.from({ length: 3 }).map((_, idx) => (
-        <section key={idx} style={styles.section}>
-          <div style={styles.sectionHeaderRow}>
-            <div style={styles.skeletonTitleGroup}>
-              <div style={styles.skeletonTitle} />
-            </div>
-            <div style={styles.skeletonPill} />
-          </div>
-          <div style={styles.sectionAccentBarSkeleton} />
-          <div style={gridStyle}>
-            {Array.from({ length: 6 }).map((__, i) => (
-              <ProductSkeleton key={i} />
-            ))}
-          </div>
-        </section>
-      ))}
-    </div>
-  );
-};
-
-// ========================
-//    PRODUCT SKELETON
-// ========================
-
+// SKELETON CARD
 const ProductSkeleton = () => (
   <Card
     bordered={false}
@@ -592,137 +413,8 @@ const ProductSkeleton = () => (
   </Card>
 );
 
-// ========================
-//   SHOWROOM PRODUCTS
-// ========================
-
-const ShowroomProducts = ({ showroomId, onView }) => {
-  const dispatch = useDispatch();
-  const [wishlist, setWishlist] = useState(() => new Set());
-
-  const { productsByShowroom, loadingProductsByShowroom } = useSelector(
-    (state) => state.products
-  );
-
-  const products = productsByShowroom?.[showroomId] || [];
-  const isLoading = loadingProductsByShowroom && products.length === 0;
-
-  const columns = useResponsiveColumns();
-  const gridStyle = {
-    ...styles.productsGrid,
-    gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`,
-  };
-
-  useEffect(() => {
-    dispatch(fetchProductsByShowroom(showroomId));
-  }, [dispatch, showroomId]);
-
-  const handleAddToCart = async (e, product) => {
-    // Currently unused (no Add to Cart button), but kept for potential reuse
-    e.stopPropagation();
-
-    if (product.variants && product.variants.length > 0) {
-      message.info("Please select a size on the product page");
-      onView(product._id);
-      return;
-    }
-
-    const payload = { productId: product._id, quantity: 1 };
-    const result = await dispatch(addItemToCart(payload));
-
-    if (result.meta.requestStatus === "fulfilled") {
-      message.success(`${product.name} added to cart`);
-    } else {
-      const err = result.payload || "Failed to add to cart";
-      if (err === "Not authenticated") {
-        message.error("Please login to add items to cart");
-      } else {
-        message.error(err);
-      }
-    }
-  };
-
-  const handleToggleWishlist = (productId) => {
-    setWishlist((prev) => {
-      const next = new Set(prev);
-      if (next.has(productId)) {
-        next.delete(productId);
-        message.info("Removed from Wishlist");
-      } else {
-        next.add(productId);
-        message.success("Added to Wishlist");
-      }
-      return next;
-    });
-  };
-
-  if (isLoading) {
-    return (
-      <div style={gridStyle}>
-        {Array.from({ length: 6 }).map((_, i) => (
-          <ProductSkeleton key={i} />
-        ))}
-      </div>
-    );
-  }
-
-  if (products.length === 0) {
-    return (
-      <Card bordered={false} style={styles.emptyCard}>
-        <div style={styles.emptyState}>
-          <Package size={52} style={styles.emptyIcon} />
-          <Title level={4} style={styles.emptyTitle}>
-            No Products Available
-          </Title>
-          <Text type="secondary" style={styles.emptyDescription}>
-            Check back later for new arrivals in this showroom.
-          </Text>
-        </div>
-      </Card>
-    );
-  }
-
-  return (
-    <div style={gridStyle}>
-      {products.map((product) => {
-        const priceInfo = getPriceDisplay(product);
-        const stockCount = getStockCount(product);
-        const discount = calcDiscount(priceInfo.min, product.oldPrice);
-        const isWishlisted = wishlist.has(product._id);
-        const isActive = isProductActive(product);
-
-        return (
-          <ProductCard
-            key={product._id}
-            product={product}
-            priceInfo={priceInfo}
-            stockCount={stockCount}
-            discount={discount}
-            isWishlisted={isWishlisted}
-            isActive={isActive}
-            onView={onView}
-            onToggleWishlist={handleToggleWishlist}
-          />
-        );
-      })}
-    </div>
-  );
-};
-
-// ========================
-//     PRODUCT CARD UI
-// ========================
-
-const ProductCard = ({
-  product,
-  priceInfo,
-  stockCount,
-  discount,
-  isWishlisted,
-  isActive,
-  onView,
-  onToggleWishlist,
-}) => {
+// PRODUCT CARD
+const ProductCard = ({ product, priceInfo, stockCount, discount, isActive, onView }) => {
   const [hovered, setHovered] = useState(false);
 
   return (
@@ -738,7 +430,6 @@ const ProductCard = ({
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
-      {/* Media */}
       <div style={styles.productMediaOuter}>
         <div style={styles.productMediaInner}>
           {product.images?.[0]?.url ? (
@@ -766,7 +457,6 @@ const ProductCard = ({
             </div>
           )}
 
-          {/* Badges */}
           <div style={styles.mediaBadgesRow}>
             {discount > 0 && (
               <span style={{ ...styles.badgeBase, ...styles.badgeDiscount }}>
@@ -780,28 +470,6 @@ const ProductCard = ({
             )}
           </div>
 
-          {/* Wishlist */}
-          <Button
-            type="text"
-            size="small"
-            style={styles.wishlistButton}
-            icon={
-              <Heart
-                size={15}
-                style={{
-                  ...styles.wishlistIcon,
-                  color: isWishlisted ? theme.danger : "#6b7280",
-                  fill: isWishlisted ? theme.danger : "none",
-                }}
-              />
-            }
-            onClick={(e) => {
-              e.stopPropagation();
-              onToggleWishlist(product._id);
-            }}
-          />
-
-          {/* Out of stock */}
           {!isActive && (
             <div style={styles.outOfStockOverlay}>
               <Tag style={styles.outOfStockTag}>Out of stock</Tag>
@@ -810,7 +478,6 @@ const ProductCard = ({
         </div>
       </div>
 
-      {/* Body */}
       <div style={styles.productBody}>
         <div
           style={{
@@ -821,7 +488,6 @@ const ProductCard = ({
           {product.name}
         </div>
 
-        {/* Price */}
         <div style={styles.priceRow}>
           <div style={styles.priceColumn}>
             <Tooltip
@@ -834,7 +500,7 @@ const ProductCard = ({
             </Tooltip>
             {product.oldPrice > 0 && product.oldPrice > priceInfo.min && (
               <Text delete type="secondary" style={styles.oldPrice}>
-                ₵{product.oldPrice.toFixed(2)}
+                ₵{formatMoney(product.oldPrice)}
               </Text>
             )}
           </div>
@@ -846,8 +512,13 @@ const ProductCard = ({
           )}
         </div>
 
-        
-        {/* Single CTA: View details */}
+        {product.variants && product.variants.length > 0 && (
+          <div style={styles.variantInfo}>
+            <TrendingUp size={12} />
+            <span>Multiple sizes available</span>
+          </div>
+        )}
+
         <div style={styles.actions}>
           <Button
             style={styles.ctaButton}
@@ -865,4 +536,105 @@ const ProductCard = ({
   );
 };
 
-export default ProductsByShowroom;
+// NEW ARRIVALS COMPONENT (GRID ONLY)
+const NewArrivals = () => {
+  const dispatch = useDispatch();
+  const navigate = useNavigate();
+  const columns = useResponsiveColumns();
+
+  const { products = [], loadingProducts, error } = useSelector(
+    (state) => state.products
+  );
+
+  useEffect(() => {
+    if (!products.length) {
+      dispatch(fetchProducts());
+    }
+  }, [dispatch, products.length]);
+
+  const recentProducts = useMemo(() => {
+    const sorted = [...products].sort((a, b) => {
+      if (a.createdAt && b.createdAt) {
+        return new Date(b.createdAt) - new Date(a.createdAt);
+      }
+      return 0;
+    });
+    return sorted.slice(0, MAX_ITEMS);
+  }, [products]);
+
+  const gridStyle = useMemo(
+    () => ({
+      ...styles.productsGrid,
+      gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`,
+      marginTop: 8,
+    }),
+    [columns]
+  );
+
+  const handleViewProduct = (id) => navigate(`/product/${id}`);
+
+  if (!loadingProducts && !error && recentProducts.length === 0) {
+    return null;
+  }
+
+  return (
+    <div style={styles.page}>
+      <div style={styles.pageInner}>
+        <section style={styles.section}>
+          <header style={styles.sectionHeader}>
+            <Title level={4} style={styles.sectionTitle}>
+              New Arrivals
+            </Title>
+          </header>
+          <div style={styles.sectionAccentBar} />
+
+          {loadingProducts ? (
+            <div style={gridStyle}>
+              {Array.from({ length: columns }).map((_, i) => (
+                <ProductSkeleton key={i} />
+              ))}
+            </div>
+          ) : error ? (
+            <Card bordered={false} style={styles.emptyCard}>
+              <div style={styles.emptyState}>
+                <Package size={48} style={styles.emptyIcon} />
+                <Title level={4} style={styles.emptyTitle}>
+                  Couldn&apos;t fetch new arrivals
+                </Title>
+                <Text type="secondary" style={styles.emptyDescription}>
+                  {String(error)}
+                </Text>
+              </div>
+            </Card>
+          ) : (
+            <div style={gridStyle}>
+              {recentProducts.map((product) => {
+                const priceInfo = getPriceDisplay(product);
+                const stockCount = getStockCount(product);
+                const discount = calcDiscount(
+                  priceInfo.min,
+                  product.oldPrice
+                );
+                const isActive = isProductActive(product);
+
+                return (
+                  <ProductCard
+                    key={product._id}
+                    product={product}
+                    priceInfo={priceInfo}
+                    stockCount={stockCount}
+                    discount={discount}
+                    isActive={isActive}
+                    onView={handleViewProduct}
+                  />
+                );
+              })}
+            </div>
+          )}
+        </section>
+      </div>
+    </div>
+  );
+};
+
+export default NewArrivals;

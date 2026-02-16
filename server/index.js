@@ -12,6 +12,7 @@ const orderRoutes = require('./routes/orders');
 const cartRoutes = require('./routes/cartRoute');
 const categoryRoutes = require('./routes/category');
 const showroomRoutes = require('./routes/showroom');
+const shippingRoutes = require('./routes/shipping');
 
 // Connect to database
 connectDB();
@@ -30,6 +31,7 @@ app.use('/api/orders', orderRoutes);
 app.use('/api/cart', cartRoutes);
 app.use('/api/categories',categoryRoutes);
 app.use('/api/showrooms', showroomRoutes);
+app.use('/api/shipping', shippingRoutes);
 
 
 // Error handling middleware

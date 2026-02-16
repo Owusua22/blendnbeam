@@ -11,15 +11,21 @@ import ProductDetailsPage from "./Pages/ProductDetailsPage";
 import CartPage from "./Pages/CartPage";
 import CheckoutPage from "./Pages/Checkout";
 import Orders from "./Pages/Admin/Orders";
+import Shipping from "./Pages/Admin/Shipping";
+import CategoryProductsPage from "./Pages/ProductbyCategories";
+import OrderReceivedPage from "./Pages/OrderReceived";
 
 function App() {
   return (
     <Router>
       <Navbar />
+      
       <Routes>
         {/* Public routes */}
         <Route path="/" element={<Home />} />
         <Route path="/checkout" element={<CheckoutPage />} />
+        <Route path="/category/:categoryId" element={<CategoryProductsPage />} />
+        <Route path="/order-received/:orderId" element={<OrderReceivedPage />} />
  
         <Route path="/cart" element={<CartPage />} />
         
@@ -32,9 +38,9 @@ function App() {
           <Route path="showrooms" element={<Showroom />} />
           <Route path="products" element={<ProductsPage />} />
           <Route path="orders" element={<Orders />} />
+          <Route path="shipping" element={<Shipping/>} />
 
-          {/* Optional default dashboard page */}
-          <Route index element={<h2>Welcome to Admin Dashboard</h2>} />
+          
         </Route>
       </Routes>
     </Router>

@@ -1,3 +1,4 @@
+// Redux/slice/cartSlice.js
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import {
   getCart,
@@ -6,8 +7,36 @@ import {
   removeFromCart,
   clearCart,
 } from "../../api";
+import { createOrderThunk } from "./orderSlice"; // adjust path if needed
 
 const getToken = (getState) => getState().auth.userInfo?.token;
+
+const CART_CACHE_KEY = "app:cart:v1";
+
+const loadCartFromCache = () => {
+  try {
+    const raw =
+      typeof localStorage !== "undefined" &&
+      localStorage.getItem(CART_CACHE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (parsed && Array.isArray(parsed.items)) return parsed;
+  } catch {}
+  return null;
+};
+
+const saveCartToCache = (cart) => {
+  try {
+    if (!cart) {
+      if (typeof localStorage !== "undefined")
+        localStorage.removeItem(CART_CACHE_KEY);
+      return;
+    }
+    if (typeof localStorage !== "undefined") {
+      localStorage.setItem(CART_CACHE_KEY, JSON.stringify(cart));
+    }
+  } catch {}
+};
 
 // ---------------- Thunks ----------------
 
@@ -17,27 +46,30 @@ export const fetchCart = createAsyncThunk(
     try {
       const token = getToken(getState);
       if (!token) return rejectWithValue("Not authenticated");
-
       const data = await getCart(token);
       return normalizeCart(data ?? null);
     } catch (err) {
-      return rejectWithValue(err.response?.data || err.message);
+      return rejectWithValue(err?.response?.data || err.message);
     }
   }
 );
 
 export const addItemToCart = createAsyncThunk(
   "cart/addItemToCart",
- async ({ productId, quantity, color, size, price }, { getState, rejectWithValue }) => {
-
+  async (
+    { productId, quantity, color, size, price, sizePrice, variantId },
+    { getState, rejectWithValue }
+  ) => {
     try {
       const token = getToken(getState);
       if (!token) return rejectWithValue("Not authenticated");
-
-      const data = await addToCart({ productId, quantity, color, size, price}, token);
+      const data = await addToCart(
+        { productId, quantity, color, size, price, sizePrice, variantId },
+        token
+      );
       return normalizeCart(data ?? null);
     } catch (err) {
-      return rejectWithValue(err.response?.data || err.message);
+      return rejectWithValue(err?.response?.data || err.message);
     }
   }
 );
@@ -48,11 +80,10 @@ export const updateCartItemQty = createAsyncThunk(
     try {
       const token = getToken(getState);
       if (!token) return rejectWithValue("Not authenticated");
-
       const data = await updateCartItem(itemId, quantity, token);
       return normalizeCart(data ?? null);
     } catch (err) {
-      return rejectWithValue(err.response?.data || err.message);
+      return rejectWithValue(err?.response?.data || err.message);
     }
   }
 );
@@ -63,11 +94,10 @@ export const removeCartItem = createAsyncThunk(
     try {
       const token = getToken(getState);
       if (!token) return rejectWithValue("Not authenticated");
-
       const data = await removeFromCart(itemId, token);
       return normalizeCart(data ?? null);
     } catch (err) {
-      return rejectWithValue(err.response?.data || err.message);
+      return rejectWithValue(err?.response?.data || err.message);
     }
   }
 );
@@ -78,80 +108,53 @@ export const clearUserCart = createAsyncThunk(
     try {
       const token = getToken(getState);
       if (!token) return rejectWithValue("Not authenticated");
-
-      await clearCart(token);
-      return null; // cart cleared
+      await clearCart(token); // clears in DB
+      return null; // clear client state
     } catch (err) {
-      return rejectWithValue(err.response?.data || err.message);
+      return rejectWithValue(err?.response?.data || err.message);
     }
   }
 );
 
 // ---------------- Helper ----------------
 
-// Replace your normalizeCart function with this fixed version:
-
 const normalizeCart = (cart) => {
   if (!cart) return null;
 
-  console.log('=== NORMALIZE CART DEBUG ===');
-  console.log('Raw cart from backend:', cart);
-  console.log('Raw cart.items:', cart.items);
-
-  const items = (cart.items || []).map(item => {
-    console.log('\n--- Processing item ---');
-    console.log('Full item:', item);
-    console.log('item.price:', item.price);
-    console.log('item.product:', item.product);
-    console.log('item.product?.price:', item.product?.price);
-    
-    // FIXED: Try multiple sources for the price
+  const items = (cart.items || []).map((item) => {
     let finalPrice = 0;
-    
-    // Priority 1: Use the stored item.price (this is what we sent from frontend)
-    if (item.price !== undefined && item.price !== null && item.price !== 0) {
+    if (item.sizePrice !== undefined && item.sizePrice !== null) {
+      finalPrice = Number(item.sizePrice);
+    } else if (item.price !== undefined && item.price !== null) {
       finalPrice = Number(item.price);
-      console.log('Using item.price:', finalPrice);
-    }
-    // Priority 2: Fallback to product.price if item.price is missing
-    else if (item.product?.price !== undefined && item.product?.price !== null) {
+    } else if (
+      item.product?.price !== undefined &&
+      item.product?.price !== null
+    ) {
       finalPrice = Number(item.product.price);
-      console.log('Using item.product.price:', finalPrice);
     }
-    
-    console.log('Final price for this item:', finalPrice);
 
-    const normalizedItem = {
+    return {
       _id: item._id,
       product: item.product?._id || item.product,
-      name: item.product?.name || item.name || 'Unknown Product',
-      image: item.product?.images?.[0]?.url || item.image || '/placeholder.jpg',
-      price: finalPrice, // Use the resolved price
+      name: item.product?.name || item.name || "Unknown Product",
+      image: item.product?.images?.[0]?.url || item.image || "/placeholder.jpg",
+      price: finalPrice,
       quantity: Number(item.quantity) || 0,
       color: item.color || null,
       size: item.size || null,
+      variant: item.variant || null,
+      raw: item,
     };
-    
-    console.log('Normalized item:', normalizedItem);
-    return normalizedItem;
   });
 
-  const itemsPrice = items.reduce((sum, i) => {
-    const itemTotal = (Number(i.price) || 0) * (Number(i.quantity) || 0);
-    console.log(`Item ${i.name}: price=${i.price} x qty=${i.quantity} = ${itemTotal}`);
-    return sum + itemTotal;
-  }, 0);
-  
+  const itemsPrice = items.reduce(
+    (sum, i) => sum + (Number(i.price) || 0) * (Number(i.quantity) || 0),
+    0
+  );
   const shippingPrice = Number(cart.shippingPrice) || 0;
   const taxPrice = Number(cart.taxPrice) || 0;
   const totalAmount = itemsPrice + shippingPrice + taxPrice;
-
-  console.log('\nCart Totals:');
-  console.log('Items Price:', itemsPrice);
-  console.log('Shipping:', shippingPrice);
-  console.log('Tax:', taxPrice);
-  console.log('Total:', totalAmount);
-  console.log('=== END NORMALIZE DEBUG ===\n');
 
   return {
     _id: cart._id,
@@ -169,21 +172,39 @@ const normalizeCart = (cart) => {
 const cartSlice = createSlice({
   name: "cart",
   initialState: {
-    cart: null,
+    cart: loadCartFromCache(),
     loading: false,
     error: null,
+    lastSyncedAt: 0,
   },
   reducers: {
     resetCartState: (state) => {
       state.cart = null;
       state.loading = false;
       state.error = null;
+      state.lastSyncedAt = 0;
+      saveCartToCache(null);
     },
   },
   extraReducers: (builder) => {
-    const pending = (state) => { state.loading = true; state.error = null; };
-    const fulfilled = (state, action) => { state.loading = false; state.cart = action.payload; };
-    const rejected = (state, action) => { state.loading = false; state.error = action.payload; };
+    const pending = (state) => {
+      state.loading = true;
+      state.error = null;
+    };
+    const fulfilled = (state, action) => {
+      state.loading = false;
+      state.cart = action.payload;
+      state.lastSyncedAt = Date.now();
+      saveCartToCache(action.payload);
+    };
+    const rejected = (state, action) => {
+      state.loading = false;
+      state.error = action.payload;
+      if (action.payload === "Not authenticated") {
+        state.cart = null;
+        saveCartToCache(null);
+      }
+    };
 
     builder
       .addCase(fetchCart.pending, pending)
@@ -203,8 +224,21 @@ const cartSlice = createSlice({
       .addCase(removeCartItem.rejected, rejected)
 
       .addCase(clearUserCart.pending, pending)
-      .addCase(clearUserCart.fulfilled, fulfilled)
-      .addCase(clearUserCart.rejected, rejected);
+      .addCase(clearUserCart.fulfilled, (state) => {
+        state.loading = false;
+        state.cart = null;
+        state.lastSyncedAt = Date.now();
+        saveCartToCache(null);
+      })
+      .addCase(clearUserCart.rejected, rejected)
+
+      // Safety-net: when an order is successfully created, snap client cart to empty
+      .addCase(createOrderThunk.fulfilled, (state) => {
+        state.loading = false;
+        state.cart = null;
+        state.lastSyncedAt = Date.now();
+        saveCartToCache(null);
+      });
   },
 });
 

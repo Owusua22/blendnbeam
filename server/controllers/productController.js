@@ -10,6 +10,36 @@ const parseJSON = (value) => {
   }
 };
 
+// Helper: compute display price - lowest variant price if variants exist, otherwise base price
+const getDisplayPrice = (product) => {
+  if (!product) return 0;
+
+  const variants = Array.isArray(product.variants) ? product.variants : [];
+  if (variants.length > 0) {
+    // collect numeric prices from variants (filter out invalid)
+    const prices = variants
+      .map((v) => {
+        const num = Number(v?.price);
+        return Number.isFinite(num) ? num : null;
+      })
+      .filter((p) => p !== null);
+
+    if (prices.length > 0) return Math.min(...prices);
+  }
+
+  const base = Number(product.price);
+  return Number.isFinite(base) ? base : 0;
+};
+
+// Utility: attach displayPrice to a product doc/object (non-destructive)
+const withDisplayPrice = (productDoc) => {
+  if (!productDoc) return productDoc;
+  // ensure plain object
+  const obj = typeof productDoc.toObject === "function" ? productDoc.toObject() : { ...productDoc };
+  obj.displayPrice = getDisplayPrice(obj);
+  return obj;
+};
+
 // =======================================================
 //  GET ALL PRODUCTS
 // =======================================================
@@ -64,9 +94,12 @@ exports.getProducts = async (req, res) => {
       Product.countDocuments(query),
     ]);
 
+    // attach displayPrice to each returned product
+    const productsWithPrice = products.map(withDisplayPrice);
+
     res.json({
       success: true,
-      data: products,
+      data: productsWithPrice,
       pagination: {
         total,
         totalPages: Math.ceil(total / numericLimit),
@@ -91,7 +124,9 @@ exports.getProductsByCategory = async (req, res) => {
       .populate("category", "name")
       .populate("showroom", "name");
 
-    res.json({ success: true, data: products });
+    const productsWithPrice = products.map(withDisplayPrice);
+
+    res.json({ success: true, data: productsWithPrice });
   } catch (error) {
     console.error("Category Fetch Error:", error);
     res.status(500).json({ success: false, message: "Server error" });
@@ -110,7 +145,9 @@ exports.getProductsByShowroom = async (req, res) => {
       .populate("category", "name")
       .populate("showroom", "name");
 
-    res.json({ success: true, data: products });
+    const productsWithPrice = products.map(withDisplayPrice);
+
+    res.json({ success: true, data: productsWithPrice });
   } catch (error) {
     console.error("Showroom Fetch Error:", error);
     res.status(500).json({ success: false, message: "Server error" });
@@ -129,7 +166,9 @@ exports.getProduct = async (req, res) => {
     if (!product)
       return res.status(404).json({ success: false, message: "Not found" });
 
-    res.json({ success: true, data: product });
+    const productWithPrice = withDisplayPrice(product);
+
+    res.json({ success: true, data: productWithPrice });
   } catch (error) {
     console.error("Get Product Error:", error);
     res.status(500).json({ success: false, message: "Server error" });
@@ -164,7 +203,9 @@ exports.createProduct = async (req, res) => {
       images: uploadedImages,
     });
 
-    res.status(201).json({ success: true, data: product });
+    const productWithPrice = withDisplayPrice(product);
+
+    res.status(201).json({ success: true, data: productWithPrice });
   } catch (error) {
     console.error("Create Product Error:", error);
     res.status(400).json({ success: false, message: error.message });
@@ -210,9 +251,13 @@ exports.updateProduct = async (req, res) => {
         images: updatedImages,
       },
       { new: true, runValidators: true }
-    );
+    )
+      .populate("category", "name")
+      .populate("showroom", "name");
 
-    res.json({ success: true, data: updated });
+    const updatedWithPrice = withDisplayPrice(updated);
+
+    res.json({ success: true, data: updatedWithPrice });
   } catch (error) {
     console.error("Update Product Error:", error);
     res.status(400).json({ success: false, message: error.message });
@@ -236,7 +281,7 @@ exports.deleteProductImage = async (req, res) => {
 
     await product.save();
 
-    res.json({ success: true, message: "Image deleted", data: product });
+    res.json({ success: true, message: "Image deleted", data: withDisplayPrice(product) });
   } catch (error) {
     console.error("Delete Image Error:", error);
     res.status(500).json({ success: false, message: error.message });
@@ -251,7 +296,7 @@ exports.deleteProduct = async (req, res) => {
     const product = await Product.findById(req.params.id);
 
     if (!product)
-      return res.status(404).json({ success: false, message: "Product not found" });
+      return res.status(404).json({ success: true, message: "Product not found" });
 
     // Remove images from cloud
     for (const img of product.images) {
@@ -267,7 +312,7 @@ exports.deleteProduct = async (req, res) => {
     res.json({
       success: true,
       message: "Product deleted & images removed",
-      data: product,
+      data: withDisplayPrice(product),
     });
   } catch (error) {
     console.error("Delete Product Error:", error);

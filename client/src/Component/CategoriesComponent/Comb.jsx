@@ -1,30 +1,33 @@
-import React, { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+// Chairs.jsx
+import React, {
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import {
   Card,
   Tag,
   Image,
   Button,
   Typography,
-  message,
   Tooltip,
+  message,
 } from "antd";
 import { Eye, Heart, Package, TrendingUp } from "lucide-react";
 import { useDispatch, useSelector } from "react-redux";
+import { useNavigate } from "react-router-dom";
+import { fetchProductsByCategory } from "../../Redux/slice/productSlice";
 
-import { fetchProductsByShowroom } from "../Redux/slice/productSlice";
-import { fetchShowrooms } from "../Redux/slice/showroomSlice";
-import { addItemToCart } from "../Redux/slice/cartSlice";
+const { Title, Text } = Typography;
 
-const { Text, Title } = Typography;
+const COMB_CATEGORY_ID = "691b317f70b57fcd66067ef0";
+const SLIDE_INTERVAL_MS = 4500;
 
 // ========================
 //   THEME & INLINE STYLES
 // ========================
 const theme = {
   
-  borderSubtle: "rgba(15,23,42,0.06)",
-  borderStrong: "rgba(15,23,42,0.12)",
   shadowSoft: "0 18px 45px rgba(15,23,42,0.06)",
   shadowHover: "0 22px 55px rgba(15,23,42,0.14)",
   brandPrimary: "#111827",
@@ -54,7 +57,7 @@ const styles = {
 
   // Section
   section: {
-    marginBottom: 14,
+    marginBottom: 18,
   },
   sectionHeader: {
     display: "flex",
@@ -69,6 +72,7 @@ const styles = {
     letterSpacing: "0.03em",
     fontSize: 17,
     color: theme.brandPrimary,
+    textTransform: "uppercase",
   },
   sectionAccentBar: {
     width: 70,
@@ -77,43 +81,6 @@ const styles = {
     background: `linear-gradient(90deg,${theme.accentYellow},${theme.accentGreen})`,
     boxShadow: "0 4px 10px rgba(34,197,94,0.35)",
     marginBottom: 10,
-  },
-  sectionAccentBarSkeleton: {
-    width: 70,
-    height: 3,
-    borderRadius: 999,
-    backgroundColor: "#e5e7eb",
-    marginBottom: 10,
-  },
-
-  // Loading skeleton (section)
-  loadingRoot: {
-    display: "flex",
-    flexDirection: "column",
-    gap: 18,
-  },
-  sectionHeaderRow: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 6,
-  },
-  skeletonTitleGroup: {
-    display: "flex",
-    flexDirection: "column",
-    gap: 4,
-  },
-  skeletonTitle: {
-    width: 160,
-    height: 18,
-    borderRadius: 999,
-    backgroundColor: "#e5e7eb",
-  },
-  skeletonPill: {
-    width: 54,
-    height: 16,
-    borderRadius: 999,
-    backgroundColor: "#e5e7eb",
   },
 
   // Grid (base)
@@ -194,10 +161,8 @@ const styles = {
 
   // Media
   productMediaOuter: {
- 
     borderRadius: 16,
     padding: 4,
-   
   },
   productMediaInner: {
     position: "relative",
@@ -213,7 +178,6 @@ const styles = {
     alignItems: "center",
     justifyContent: "center",
     color: "#9ca3af",
-    
   },
 
   // Badges
@@ -245,8 +209,8 @@ const styles = {
     color: "#ef4444",
   },
   badgeVariants: {
-    background: "#fef9c3", // soft yellow
-    color: "#65a30d", // lime green
+    background: "#fef9c3",
+    color: "#65a30d",
     marginLeft: "auto",
   },
 
@@ -259,7 +223,7 @@ const styles = {
     height: 26,
     borderRadius: 999,
     border: "none",
-   
+    background: "rgba(255,255,255,0.96)",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
@@ -362,8 +326,6 @@ const styles = {
     flexDirection: "column",
     gap: 4,
   },
-
-  // Single CTA (View details) – green/yellow gradient
   ctaButton: {
     width: "100%",
     height: 34,
@@ -380,6 +342,23 @@ const styles = {
     transition:
       "background 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease",
   },
+
+  // Slider
+  sliderViewport: {
+    overflow: "hidden",
+    marginTop: 8,
+  },
+  sliderTrack: (slideCount, currentSlide) => ({
+    display: "flex",
+    width: `${slideCount * 100}%`,
+    transform: `translateX(-${(currentSlide * 100) / slideCount}%)`,
+    transition: "transform 0.5s ease-out",
+  }),
+  slide: (slideCount) => ({
+    width: `${100 / slideCount}%`,
+    flexShrink: 0,
+    boxSizing: "border-box",
+  }),
 
   // Empty state
   emptyCard: {
@@ -408,10 +387,9 @@ const styles = {
 
 // ========================
 //   RESPONSIVE GRID HOOK
+//   (same logic as ProductsByShowroom)
 // ========================
-
 const getColumnCount = (width) => {
-  // Adjust breakpoints as needed:
   // < 640px: 2 cols (small)
   // 640–1023px: 4 cols (medium)
   // >= 1024px: 6 cols (large)
@@ -428,48 +406,47 @@ const useResponsiveColumns = () => {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-
-    const handleResize = () => {
-      setColumns(getColumnCount(window.innerWidth));
-    };
-
-    window.addEventListener("resize", handleResize);
-    return () => window.removeEventListener("resize", handleResize);
+    const handler = () => setColumns(getColumnCount(window.innerWidth));
+    window.addEventListener("resize", handler);
+    return () => window.removeEventListener("resize", handler);
   }, []);
 
   return columns;
 };
 
 // ========================
-//   LOGIC HELPERS
+//   HELPERS
 // ========================
+const formatMoney = (value) =>
+  Number(value || 0).toLocaleString("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
 
 const getPriceDisplay = (product) => {
   if (product.variants && product.variants.length > 0) {
-    const prices = product.variants.map((v) => v.price || 0);
+    const prices = product.variants.map((v) => Number(v.price || 0));
     const minPrice = Math.min(...prices);
     const maxPrice = Math.max(...prices);
 
     if (minPrice === maxPrice) {
       return {
-        display: `₵${minPrice.toFixed(2)}`,
+        display: `₵${formatMoney(minPrice)}`,
         isRange: false,
         min: minPrice,
         max: maxPrice,
       };
     }
-
     return {
-      display: `₵${minPrice.toFixed(2)} - ₵${maxPrice.toFixed(2)}`,
+      display: `₵${formatMoney(minPrice)} - ₵${formatMoney(maxPrice)}`,
       isRange: true,
       min: minPrice,
       max: maxPrice,
     };
   }
-
-  const price = product.price || 0;
+  const price = Number(product.price || 0);
   return {
-    display: `₵${price.toFixed(2)}`,
+    display: `₵${formatMoney(price)}`,
     isRange: false,
     min: price,
     max: price,
@@ -493,87 +470,18 @@ const calcDiscount = (price, oldPrice) => {
   return Math.round(((oldPrice - price) / oldPrice) * 100);
 };
 
-// ========================
-//   MAIN COMPONENT
-// ========================
-
-const ProductsByShowroom = () => {
-  const dispatch = useDispatch();
-  const navigate = useNavigate();
-
-  const { items: showrooms = [], loading: loadingShowrooms } = useSelector(
-    (state) => state.showrooms
-  );
-
-  useEffect(() => {
-    dispatch(fetchShowrooms());
-  }, [dispatch]);
-
-  const handleViewProduct = (productId) => navigate(`/product/${productId}`);
-
-  return (
-    <div style={styles.page}>
-      <div style={styles.pageInner}>
-        {loadingShowrooms ? (
-          <LoadingShowrooms />
-        ) : (
-          showrooms.map((showroom) => (
-            <section key={showroom._id} style={styles.section}>
-              <header style={styles.sectionHeader}>
-                <Title level={4} style={styles.sectionTitle}>
-                  {showroom.name}
-                </Title>
-              </header>
-              <div style={styles.sectionAccentBar} />
-              <ShowroomProducts
-                showroomId={showroom._id}
-                onView={handleViewProduct}
-              />
-            </section>
-          ))
-        )}
-      </div>
-    </div>
-  );
+const chunkArray = (arr, size) => {
+  if (!size) return [];
+  const res = [];
+  for (let i = 0; i < arr.length; i += size) {
+    res.push(arr.slice(i, i + size));
+  }
+  return res;
 };
 
 // ========================
-//   LOADING PLACEHOLDER
+//   SKELETON CARD
 // ========================
-
-const LoadingShowrooms = () => {
-  const columns = useResponsiveColumns();
-  const gridStyle = {
-    ...styles.productsGrid,
-    gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`,
-  };
-
-  return (
-    <div style={styles.loadingRoot}>
-      {Array.from({ length: 3 }).map((_, idx) => (
-        <section key={idx} style={styles.section}>
-          <div style={styles.sectionHeaderRow}>
-            <div style={styles.skeletonTitleGroup}>
-              <div style={styles.skeletonTitle} />
-            </div>
-            <div style={styles.skeletonPill} />
-          </div>
-          <div style={styles.sectionAccentBarSkeleton} />
-          <div style={gridStyle}>
-            {Array.from({ length: 6 }).map((__, i) => (
-              <ProductSkeleton key={i} />
-            ))}
-          </div>
-        </section>
-      ))}
-    </div>
-  );
-};
-
-// ========================
-//    PRODUCT SKELETON
-// ========================
-
 const ProductSkeleton = () => (
   <Card
     bordered={false}
@@ -593,126 +501,8 @@ const ProductSkeleton = () => (
 );
 
 // ========================
-//   SHOWROOM PRODUCTS
+//   PRODUCT CARD
 // ========================
-
-const ShowroomProducts = ({ showroomId, onView }) => {
-  const dispatch = useDispatch();
-  const [wishlist, setWishlist] = useState(() => new Set());
-
-  const { productsByShowroom, loadingProductsByShowroom } = useSelector(
-    (state) => state.products
-  );
-
-  const products = productsByShowroom?.[showroomId] || [];
-  const isLoading = loadingProductsByShowroom && products.length === 0;
-
-  const columns = useResponsiveColumns();
-  const gridStyle = {
-    ...styles.productsGrid,
-    gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`,
-  };
-
-  useEffect(() => {
-    dispatch(fetchProductsByShowroom(showroomId));
-  }, [dispatch, showroomId]);
-
-  const handleAddToCart = async (e, product) => {
-    // Currently unused (no Add to Cart button), but kept for potential reuse
-    e.stopPropagation();
-
-    if (product.variants && product.variants.length > 0) {
-      message.info("Please select a size on the product page");
-      onView(product._id);
-      return;
-    }
-
-    const payload = { productId: product._id, quantity: 1 };
-    const result = await dispatch(addItemToCart(payload));
-
-    if (result.meta.requestStatus === "fulfilled") {
-      message.success(`${product.name} added to cart`);
-    } else {
-      const err = result.payload || "Failed to add to cart";
-      if (err === "Not authenticated") {
-        message.error("Please login to add items to cart");
-      } else {
-        message.error(err);
-      }
-    }
-  };
-
-  const handleToggleWishlist = (productId) => {
-    setWishlist((prev) => {
-      const next = new Set(prev);
-      if (next.has(productId)) {
-        next.delete(productId);
-        message.info("Removed from Wishlist");
-      } else {
-        next.add(productId);
-        message.success("Added to Wishlist");
-      }
-      return next;
-    });
-  };
-
-  if (isLoading) {
-    return (
-      <div style={gridStyle}>
-        {Array.from({ length: 6 }).map((_, i) => (
-          <ProductSkeleton key={i} />
-        ))}
-      </div>
-    );
-  }
-
-  if (products.length === 0) {
-    return (
-      <Card bordered={false} style={styles.emptyCard}>
-        <div style={styles.emptyState}>
-          <Package size={52} style={styles.emptyIcon} />
-          <Title level={4} style={styles.emptyTitle}>
-            No Products Available
-          </Title>
-          <Text type="secondary" style={styles.emptyDescription}>
-            Check back later for new arrivals in this showroom.
-          </Text>
-        </div>
-      </Card>
-    );
-  }
-
-  return (
-    <div style={gridStyle}>
-      {products.map((product) => {
-        const priceInfo = getPriceDisplay(product);
-        const stockCount = getStockCount(product);
-        const discount = calcDiscount(priceInfo.min, product.oldPrice);
-        const isWishlisted = wishlist.has(product._id);
-        const isActive = isProductActive(product);
-
-        return (
-          <ProductCard
-            key={product._id}
-            product={product}
-            priceInfo={priceInfo}
-            stockCount={stockCount}
-            discount={discount}
-            isWishlisted={isWishlisted}
-            isActive={isActive}
-            onView={onView}
-            onToggleWishlist={handleToggleWishlist}
-          />
-        );
-      })}
-    </div>
-  );
-};
-
-// ========================
-//     PRODUCT CARD UI
-// ========================
-
 const ProductCard = ({
   product,
   priceInfo,
@@ -834,7 +624,7 @@ const ProductCard = ({
             </Tooltip>
             {product.oldPrice > 0 && product.oldPrice > priceInfo.min && (
               <Text delete type="secondary" style={styles.oldPrice}>
-                ₵{product.oldPrice.toFixed(2)}
+                ₵{formatMoney(product.oldPrice)}
               </Text>
             )}
           </div>
@@ -846,8 +636,15 @@ const ProductCard = ({
           )}
         </div>
 
-        
-        {/* Single CTA: View details */}
+        {/* Variant info */}
+        {product.variants && product.variants.length > 0 && (
+          <div style={styles.variantInfo}>
+            <TrendingUp size={12} />
+            <span>Multiple sizes available</span>
+          </div>
+        )}
+
+        {/* CTA */}
         <div style={styles.actions}>
           <Button
             style={styles.ctaButton}
@@ -865,4 +662,221 @@ const ProductCard = ({
   );
 };
 
-export default ProductsByShowroom;
+// ========================
+//   MAIN CHAIRS COMPONENT
+// ========================
+const Comb = () => {
+  const dispatch = useDispatch();
+  const navigate = useNavigate();
+  const columns = useResponsiveColumns();
+  const [loading, setLoading] = useState(false);
+  const [localError, setLocalError] = useState(null);
+  const [wishlist, setWishlist] = useState(() => new Set());
+  const [currentSlide, setCurrentSlide] = useState(0);
+
+  const { products = [] } = useSelector((state) => state.products);
+
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    setLocalError(null);
+
+    dispatch(fetchProductsByCategory(COMB_CATEGORY_ID))
+      .unwrap()
+      .catch((err) => {
+        if (active) {
+          setLocalError(
+            typeof err === "string" ? err : "Failed to load Saloon Chairs"
+          );
+        }
+      })
+      .finally(() => active && setLoading(false));
+
+    return () => {
+      active = false;
+    };
+  }, [dispatch]);
+
+  // Filter this category only (safety)
+  const categoryProducts = useMemo(
+    () =>
+      products.filter((p) => {
+        const cat = p.category;
+        if (!cat) return true;
+        if (typeof cat === "string") return cat === COMB_CATEGORY_ID;
+        if (typeof cat === "object" && cat._id)
+          return cat._id === COMB_CATEGORY_ID;
+        return true;
+      }),
+    [products]
+  );
+
+  // Most recent 6
+  const recentSix = useMemo(() => {
+    const sorted = [...categoryProducts].sort((a, b) => {
+      if (a.createdAt && b.createdAt) {
+        return new Date(b.createdAt) - new Date(a.createdAt);
+      }
+      return 0;
+    });
+    return sorted.slice(0, 6);
+  }, [categoryProducts]);
+
+  const gridStyle = useMemo(
+    () => ({
+      ...styles.productsGrid,
+      gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`,
+      marginTop: 8,
+    }),
+    [columns]
+  );
+
+  // Create slides only when we can't show all 6 in a single row (columns < 6)
+  const slides = useMemo(() => {
+    if (columns >= 6) return [recentSix]; // one static grid
+    return chunkArray(recentSix, columns || 1);
+  }, [recentSix, columns]);
+
+  // Reset slide on slides length / columns change
+  useEffect(() => {
+    setCurrentSlide(0);
+  }, [slides.length]);
+
+  // Auto slide when more than 1 slide and columns < 6
+  useEffect(() => {
+    if (slides.length <= 1 || columns >= 6) return;
+    const id = setInterval(
+      () => setCurrentSlide((prev) => (prev + 1) % slides.length),
+      SLIDE_INTERVAL_MS
+    );
+    return () => clearInterval(id);
+  }, [slides.length, columns]);
+
+  const handleToggleWishlist = (productId) => {
+    setWishlist((prev) => {
+      const next = new Set(prev);
+      if (next.has(productId)) {
+        next.delete(productId);
+        message.info("Removed from Wishlist");
+      } else {
+        next.add(productId);
+        message.success("Added to Wishlist");
+      }
+      return next;
+    });
+  };
+
+  const handleViewProduct = (id) => navigate(`/product/${id}`);
+
+  if (!loading && !localError && recentSix.length === 0) {
+    return null;
+  }
+
+  return (
+    <div style={styles.page}>
+      <div style={styles.pageInner}>
+        <section style={styles.section}>
+          {/* Header + underline like ProductsByShowroom */}
+          <header style={styles.sectionHeader}>
+            <Title level={4} style={styles.sectionTitle}>
+            Hair Stylers
+            </Title>
+          </header>
+          <div style={styles.sectionAccentBar} />
+
+          {/* Content */}
+          {loading ? (
+            <div style={gridStyle}>
+              {Array.from({ length: columns }).map((_, i) => (
+                <ProductSkeleton key={i} />
+              ))}
+            </div>
+          ) : localError ? (
+            <Card bordered={false} style={styles.emptyCard}>
+              <div style={styles.emptyState}>
+                <Package size={48} style={styles.emptyIcon} />
+                <Title level={4} style={styles.emptyTitle}>
+                  Couldn&apos;t fetch Saloon Chairs
+                </Title>
+                <Text type="secondary" style={styles.emptyDescription}>
+                  {localError}
+                </Text>
+              </div>
+            </Card>
+          ) : columns >= 6 || slides.length <= 1 ? (
+            // Large screens (6 cols) or only one slide worth: static grid
+            <div style={gridStyle}>
+              {recentSix.map((product) => {
+                const priceInfo = getPriceDisplay(product);
+                const stockCount = getStockCount(product);
+                const discount = calcDiscount(
+                  priceInfo.min,
+                  product.oldPrice
+                );
+                const isActive = isProductActive(product);
+                const isWishlisted = wishlist.has(product._id);
+
+                return (
+                  <ProductCard
+                    key={product._id}
+                    product={product}
+                    priceInfo={priceInfo}
+                    stockCount={stockCount}
+                    discount={discount}
+                    isActive={isActive}
+                    isWishlisted={isWishlisted}
+                    onView={handleViewProduct}
+                    onToggleWishlist={handleToggleWishlist}
+                  />
+                );
+              })}
+            </div>
+          ) : (
+            // Smaller screens: slider, but each slide uses same grid (2 or 4 cols)
+            <div style={styles.sliderViewport}>
+              <div
+                style={styles.sliderTrack(slides.length, currentSlide)}
+              >
+                {slides.map((group, slideIndex) => (
+                  <div
+                    key={slideIndex}
+                    style={styles.slide(slides.length)}
+                  >
+                    <div style={gridStyle}>
+                      {group.map((product) => {
+                        const priceInfo = getPriceDisplay(product);
+                        const stockCount = getStockCount(product);
+                        const discount = calcDiscount(
+                          priceInfo.min,
+                          product.oldPrice
+                        );
+                        const isActive = isProductActive(product);
+                        const isWishlisted = wishlist.has(product._id);
+
+                        return (
+                          <ProductCard
+                            key={product._id}
+                            product={product}
+                            priceInfo={priceInfo}
+                            stockCount={stockCount}
+                            discount={discount}
+                            isActive={isActive}
+                            isWishlisted={isWishlisted}
+                            onView={handleViewProduct}
+                            onToggleWishlist={handleToggleWishlist}
+                          />
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </section>
+      </div>
+    </div>
+  );
+};
+
+export default Comb;

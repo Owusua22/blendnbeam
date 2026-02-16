@@ -55,3 +55,26 @@ exports.deleteCategory = async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 };
+// @desc Get category by name
+exports.getCategoryByName = async (req, res) => {
+  try {
+    const name = req.params.name;
+
+    if (!name) {
+      return res.status(400).json({ message: "Category name is required" });
+    }
+
+    // Case-insensitive search
+    const category = await Category.findOne({
+      name: { $regex: new RegExp("^" + name + "$", "i") }
+    });
+
+    if (!category) {
+      return res.status(404).json({ message: "Category not found" });
+    }
+
+    res.json(category);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};

@@ -35,6 +35,11 @@ const AdminLayout = () => {
       key: "/admin/orders",
       icon: <List size={18} />,
       label: <Link to="/admin/orders">Orders</Link>,
+    },
+    {
+      key: "/admin/shipping",
+      icon: <List size={18} />,
+      label: <Link to="/admin/shipping">Shipping</Link>,
     }
   ];
 
