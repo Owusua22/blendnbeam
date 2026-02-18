@@ -5,18 +5,34 @@ const Product = require('../models/Product');
 const getCart = async (req, res) => {
   try {
     const cart = await Cart.findOne({ user: req.user.id })
-      .populate({ path: "items.product", select: "name price images color variants sku" })
+      .populate({
+        path: "items.product",
+        select: "name price images color variants sku",
+      })
       .populate({ path: "items.variant" });
 
+    // ✅ If cart doesn't exist yet, return an empty cart (200 OK)
     if (!cart) {
-      return res.status(404).json({ message: "Cart not found" });
+      return res.json({
+        _id: null,
+        user: req.user.id,
+        items: [],
+        shippingPrice: 0,
+        taxPrice: 0,
+      });
     }
 
-    res.json(cart);
+    // ✅ If cart exists but items missing, still return consistent shape
+    if (!Array.isArray(cart.items)) cart.items = [];
+
+    return res.json(cart);
   } catch (error) {
-    res.status(500).json({ message: "Server error", error: error.message });
+    console.error("getCart error:", error);
+    return res.status(500).json({ message: "Server error", error: error.message });
   }
 };
+
+
 
 // ===================== ADD TO CART ===================== //
 const addToCart = async (req, res) => {

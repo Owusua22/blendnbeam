@@ -5,82 +5,152 @@ import {
   getProfile,
   updateProfile,
   getAllUsers,
+  registerAdmin,
+  loginAdmin,
 } from "../../api";
 
-const userInfo = JSON.parse(localStorage.getItem("userInfo")) || null;
+const userInfoFromStorage = (() => {
+  try {
+    return JSON.parse(localStorage.getItem("userInfo")) || null;
+  } catch {
+    return null;
+  }
+})();
+
+const saveUserInfo = (data) => {
+  localStorage.setItem("userInfo", JSON.stringify(data));
+};
+
+const clearUserInfo = () => {
+  localStorage.removeItem("userInfo");
+};
+
+// Helper to extract best possible error message
+const getErrMsg = (err, fallback) =>
+  err?.response?.data?.message ||
+  err?.response?.data?.error ||
+  err?.message ||
+  fallback;
 
 // -------------------- THUNKS -------------------- //
 
-// Register new user
-export const register = createAsyncThunk(
-  "auth/register",
+export const registerUserThunk = createAsyncThunk(
+  "auth/registerUser",
   async (userData, { rejectWithValue }) => {
     try {
       const data = await registerUser(userData);
-      localStorage.setItem("userInfo", JSON.stringify(data));
+      saveUserInfo(data);
       return data;
     } catch (err) {
-      return rejectWithValue(err.response?.data?.message || "Registration failed");
+      return rejectWithValue(getErrMsg(err, "Registration failed"));
     }
   }
 );
 
-// Login user
-export const login = createAsyncThunk(
-  "auth/login",
+export const loginUserThunk = createAsyncThunk(
+  "auth/loginUser",
   async (credentials, { rejectWithValue }) => {
     try {
       const data = await loginUser(credentials);
-      localStorage.setItem("userInfo", JSON.stringify(data));
+      saveUserInfo(data);
       return data;
     } catch (err) {
-      return rejectWithValue(err.response?.data?.message || "Login failed");
+      return rejectWithValue(getErrMsg(err, "Login failed"));
     }
   }
 );
 
-// Fetch profile
-export const fetchProfile = createAsyncThunk(
+export const registerAdminThunk = createAsyncThunk(
+  "auth/registerAdmin",
+  async (adminData, { rejectWithValue }) => {
+    try {
+      // Ensure payload includes admin role (you asked for this)
+      const payload = { ...adminData, role: "admin" };
+
+      const data = await registerAdmin(payload);
+
+      // ✅ Do NOT reject here — registration succeeded.
+      // If backend didn't return role, we still continue.
+      const normalized = {
+        ...data,
+        role: data?.role || "admin", // fallback
+      };
+
+      saveUserInfo(normalized);
+      return normalized;
+    } catch (err) {
+      return rejectWithValue(getErrMsg(err, "Admin registration failed"));
+    }
+  }
+);
+
+export const loginAdminThunk = createAsyncThunk(
+  "auth/loginAdmin",
+  async (credentials, { rejectWithValue }) => {
+    try {
+      const data = await loginAdmin(credentials);
+
+      // Soft validation:
+      // If backend returns role and it's not admin => reject
+      if (data?.role && data.role !== "admin") {
+        return rejectWithValue("This account is not an admin.");
+      }
+
+      // If backend doesn't return role, don’t hard-fail; store what we have.
+      const normalized = {
+        ...data,
+        role: data?.role || "admin", // optional fallback; remove if you prefer strictness
+      };
+
+      saveUserInfo(normalized);
+      return normalized;
+    } catch (err) {
+      return rejectWithValue(getErrMsg(err, "Admin login failed"));
+    }
+  }
+);
+
+export const fetchProfileThunk = createAsyncThunk(
   "auth/fetchProfile",
   async (_, { getState, rejectWithValue }) => {
     try {
       const token = getState().auth.userInfo?.token;
       if (!token) return rejectWithValue("Not authenticated");
-      const data = await getProfile(token);
-      return data;
+      return await getProfile(token);
     } catch (err) {
-      return rejectWithValue(err.response?.data?.message || "Failed to load profile");
+      return rejectWithValue(getErrMsg(err, "Failed to load profile"));
     }
   }
 );
 
-// Update profile
-export const updateUserProfile = createAsyncThunk(
+export const updateProfileThunk = createAsyncThunk(
   "auth/updateProfile",
   async (profileData, { getState, rejectWithValue }) => {
     try {
       const token = getState().auth.userInfo?.token;
       if (!token) return rejectWithValue("Not authenticated");
       const data = await updateProfile(profileData, token);
-      localStorage.setItem("userInfo", JSON.stringify(data));
+      saveUserInfo(data);
       return data;
     } catch (err) {
-      return rejectWithValue(err.response?.data?.message || "Profile update failed");
+      return rejectWithValue(getErrMsg(err, "Profile update failed"));
     }
   }
 );
 
-// Fetch all users (Admin)
-export const fetchAllUsers = createAsyncThunk(
+export const fetchAllUsersThunk = createAsyncThunk(
   "auth/fetchAllUsers",
   async (_, { getState, rejectWithValue }) => {
     try {
       const token = getState().auth.userInfo?.token;
+      const role = getState().auth.userInfo?.role;
+
       if (!token) return rejectWithValue("Not authenticated");
-      const data = await getAllUsers(token);
-      return data;
+      if (role !== "admin") return rejectWithValue("Admin access required");
+
+      return await getAllUsers(token);
     } catch (err) {
-      return rejectWithValue(err.response?.data?.message || "Failed to fetch users");
+      return rejectWithValue(getErrMsg(err, "Failed to fetch users"));
     }
   }
 );
@@ -90,86 +160,94 @@ export const fetchAllUsers = createAsyncThunk(
 const authSlice = createSlice({
   name: "auth",
   initialState: {
-    userInfo,
+    userInfo: userInfoFromStorage,
     loading: false,
     error: null,
-    users: [], // For admin fetchAllUsers
+    users: [],
   },
   reducers: {
     logout: (state) => {
       state.userInfo = null;
       state.users = [];
-      localStorage.removeItem("userInfo");
+      state.error = null;
+      state.loading = false;
+      clearUserInfo();
+    },
+    clearAuthError: (state) => {
+      state.error = null;
     },
   },
   extraReducers: (builder) => {
+    const pending = (state) => {
+      state.loading = true;
+      state.error = null;
+    };
+    const rejected = (state, action) => {
+      state.loading = false;
+      state.error = action.payload || "Request failed";
+    };
+
     builder
-      // Register
-      .addCase(register.pending, (state) => {
-        state.loading = true;
-        state.error = null;
-      })
-      .addCase(register.fulfilled, (state, action) => {
+      // user register/login
+      .addCase(registerUserThunk.pending, pending)
+      .addCase(registerUserThunk.fulfilled, (state, action) => {
         state.loading = false;
         state.userInfo = action.payload;
       })
-      .addCase(register.rejected, (state, action) => {
-        state.loading = false;
-        state.error = action.payload;
-      })
-      // Login
-      .addCase(login.pending, (state) => {
-        state.loading = true;
-        state.error = null;
-      })
-      .addCase(login.fulfilled, (state, action) => {
+      .addCase(registerUserThunk.rejected, rejected)
+
+      .addCase(loginUserThunk.pending, pending)
+      .addCase(loginUserThunk.fulfilled, (state, action) => {
         state.loading = false;
         state.userInfo = action.payload;
       })
-      .addCase(login.rejected, (state, action) => {
-        state.loading = false;
-        state.error = action.payload;
-      })
-      // Fetch Profile
-      .addCase(fetchProfile.pending, (state) => {
-        state.loading = true;
-      })
-      .addCase(fetchProfile.fulfilled, (state, action) => {
+      .addCase(loginUserThunk.rejected, rejected)
+
+      // admin register/login
+      .addCase(registerAdminThunk.pending, pending)
+      .addCase(registerAdminThunk.fulfilled, (state, action) => {
         state.loading = false;
         state.userInfo = action.payload;
       })
-      .addCase(fetchProfile.rejected, (state, action) => {
-        state.loading = false;
-        state.error = action.payload;
-      })
-      // Update Profile
-      .addCase(updateUserProfile.pending, (state) => {
-        state.loading = true;
-        state.error = null;
-      })
-      .addCase(updateUserProfile.fulfilled, (state, action) => {
+      .addCase(registerAdminThunk.rejected, rejected)
+
+      .addCase(loginAdminThunk.pending, pending)
+      .addCase(loginAdminThunk.fulfilled, (state, action) => {
         state.loading = false;
         state.userInfo = action.payload;
       })
-      .addCase(updateUserProfile.rejected, (state, action) => {
+      .addCase(loginAdminThunk.rejected, rejected)
+
+      // profile
+      .addCase(fetchProfileThunk.pending, pending)
+      .addCase(fetchProfileThunk.fulfilled, (state, action) => {
         state.loading = false;
-        state.error = action.payload;
+        // keep token if profile endpoint doesn't return it
+        state.userInfo = { ...state.userInfo, ...action.payload };
       })
-      // Fetch All Users (Admin)
-      .addCase(fetchAllUsers.pending, (state) => {
-        state.loading = true;
-        state.error = null;
+      .addCase(fetchProfileThunk.rejected, rejected)
+
+      .addCase(updateProfileThunk.pending, pending)
+      .addCase(updateProfileThunk.fulfilled, (state, action) => {
+        state.loading = false;
+        state.userInfo = action.payload;
       })
-      .addCase(fetchAllUsers.fulfilled, (state, action) => {
+      .addCase(updateProfileThunk.rejected, rejected)
+
+      // admin users list
+      .addCase(fetchAllUsersThunk.pending, pending)
+      .addCase(fetchAllUsersThunk.fulfilled, (state, action) => {
         state.loading = false;
         state.users = action.payload;
       })
-      .addCase(fetchAllUsers.rejected, (state, action) => {
-        state.loading = false;
-        state.error = action.payload;
-      });
+      .addCase(fetchAllUsersThunk.rejected, rejected);
   },
 });
 
-export const { logout } = authSlice.actions;
+export const { logout, clearAuthError } = authSlice.actions;
 export default authSlice.reducer;
+
+// Selectors (optional)
+export const selectUserInfo = (state) => state.auth.userInfo;
+export const selectIsLoggedIn = (state) => Boolean(state.auth.userInfo?.token);
+export const selectIsAdmin = (state) => state.auth.userInfo?.role === "admin";

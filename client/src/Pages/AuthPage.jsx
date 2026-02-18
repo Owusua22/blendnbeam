@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Form, Input, Button, Typography, message, Card, Tabs, Modal } from "antd";
 import { useDispatch, useSelector } from "react-redux";
-import { register, login } from "../Redux/slice/authSlice";
+import { loginUserThunk, registerUserThunk} from "../Redux/slice/authSlice";
 
 const { Title } = Typography;
 const { TabPane } = Tabs;
@@ -28,11 +28,11 @@ const AuthModal = ({ open, onClose, defaultTab = "register" }) => {
   }, [error]);
 
   const handleLogin = (values) => {
-    dispatch(login(values));
+    dispatch(loginUserThunk(values));
   };
 
   const handleRegister = (values) => {
-    dispatch(register(values));
+    dispatch(registerUserThunk(values));
   };
 
   const handleTabChange = (key) => {

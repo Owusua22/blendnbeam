@@ -29,7 +29,7 @@ const AdminLayout = () => {
     {
       key: "/admin/customers",
       icon: <User size={18} />,
-      label: <Link to="/admin/customers">Customers</Link>,
+      label: <Link to="/admin/users">Customers</Link>,
     },
     {
       key: "/admin/orders",
@@ -40,7 +40,12 @@ const AdminLayout = () => {
       key: "/admin/shipping",
       icon: <List size={18} />,
       label: <Link to="/admin/shipping">Shipping</Link>,
-    }
+    },
+    {
+      key: "/admin/banners",
+      icon: <List size={18} />,
+      label: <Link to="/admin/banners">Banners</Link>,
+    },
   ];
 
   const handleLogout = () => {

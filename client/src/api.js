@@ -1,6 +1,6 @@
 import axios from "axios";
 
-const API_URL = import.meta.env.VITE_API_URL || "https://blend.frankotrading.com/api";
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
 
 // ---------------- AUTH ----------------
 // Register user
@@ -36,6 +36,19 @@ export const getAllUsers = async (token) => {
   const { data } = await axios.get(`${API_URL}/users`, {
     headers: { Authorization: `Bearer ${token}` },
   });
+  return data;
+};
+// ---------------- ADMIN AUTH ----------------
+
+// Register admin
+export const registerAdmin = async (adminData) => {
+  const { data } = await axios.post(`${API_URL}/users/admin/register`, adminData);
+  return data;
+};
+
+// Login admin
+export const loginAdmin = async (credentials) => {
+  const { data } = await axios.post(`${API_URL}/users/admin/login`, credentials);
   return data;
 };
 
@@ -108,12 +121,16 @@ export const getOrderById = async (id, token) => {
   return data;
 };
 
-export const markOrderPaid = async (id, token) => {
-  const { data } = await axios.put(`${API_URL}/orders/${id}/pay`, {}, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
+// ✅ NEW: Set order paid status (Admin only)
+export const setOrderPaidStatus = async (id, isPaid, token) => {
+  const { data } = await axios.put(
+    `${API_URL}/orders/${id}/paid`,
+    { isPaid },
+    { headers: { Authorization: `Bearer ${token}` } }
+  );
   return data;
 };
+
 
 export const getAllOrders = async (token) => {
   const { data } = await axios.get(`${API_URL}/orders`, {
@@ -132,6 +149,15 @@ export const updateOrderStatus = async (id, status, token) => {
   );
   return data;
 };
+// Cancel order (User only)
+export const cancelOrder = async (id, token) => {
+  const { data } = await axios.put(`${API_URL}/orders/${id}/cancel`, {}, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return data;
+};
+
+
 
 // ---------------- CATEGORIES ----------------
 export const getCategories = async () => {
@@ -280,6 +306,74 @@ export const updateShipping = async (id, shippingData, token) => {
 // Delete a shipping zone (admin)
 export const deleteShipping = async (id, token) => {
   const { data } = await axios.delete(`${API_URL}/shipping/${id}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return data;
+};
+// ---------------- BANNERS ----------------
+
+// Public: get active banners
+export const getActiveBanners = async () => {
+  const { data } = await axios.get(`${API_URL}/banners`);
+  return data;
+};
+
+// Admin: get all banners
+export const getAllBanners = async (token) => {
+  const { data } = await axios.get(`${API_URL}/banners/all`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return data;
+};
+
+// Admin: create banner (upload image)
+// bannerData: { title?, subtitle?, link?, isActive?, position?, image: File }
+export const createBanner = async (bannerData, token) => {
+  const form = new FormData();
+  if (bannerData.title) form.append("title", bannerData.title);
+  if (bannerData.subtitle) form.append("subtitle", bannerData.subtitle);
+  if (bannerData.link) form.append("link", bannerData.link);
+
+  // booleans/numbers must be strings in multipart
+  if (bannerData.isActive !== undefined) form.append("isActive", String(bannerData.isActive));
+  if (bannerData.position !== undefined) form.append("position", String(bannerData.position));
+
+  // image file required
+  form.append("image", bannerData.image);
+
+  const { data } = await axios.post(`${API_URL}/banners`, form, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "multipart/form-data",
+    },
+  });
+
+  return data;
+};
+
+// Admin: update banner (optional image)
+// updates: { title?, subtitle?, link?, isActive?, position?, image?: File }
+export const updateBanner = async (id, updates, token) => {
+  const form = new FormData();
+  
+  if (updates.link !== undefined) form.append("link", updates.link);
+  if (updates.isActive !== undefined) form.append("isActive", String(updates.isActive));
+  if (updates.position !== undefined) form.append("position", String(updates.position));
+  if (updates.image) form.append("image", updates.image);
+
+  const { data } = await axios.put(`${API_URL}/banners/${id}`, form, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "multipart/form-data",
+    },
+  });
+
+  return data;
+};
+
+// Admin: delete banner
+export const deleteBanner = async (id, token) => {
+  const { data } = await axios.delete(`${API_URL}/banners/${id}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   return data;

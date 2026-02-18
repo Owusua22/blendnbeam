@@ -6,20 +6,22 @@ const {
   login,
   getProfile,
   updateProfile,
-  getAllUsers
+  getAllUsers,
+  registerAdmin,
+  adminLogin,
 } = require('../controllers/authController');
 
 const { protect, admin } = require('../middleware/authMiddleware');
 
-// ---------------------------
-// AUTH ROUTES
-// ---------------------------
 
-// Register user
-router.post('/register', register);
+router.post("/register", register);
+router.post("/login", login);
 
-// Login user
-router.post('/login', login);
+// admin routes
+router.post("/admin/register", registerAdmin);
+router.post("/admin/login", adminLogin);
+
+
 
 // ---------------------------
 // USER PROFILE
@@ -31,9 +33,6 @@ router.get('/profile', protect, getProfile);
 // Update logged-in user profile
 router.put('/profile', protect, updateProfile);
 
-// ---------------------------
-// ADMIN ROUTES
-// ---------------------------
 
 // Fetch all users (Admin only)
 router.get('/', protect, admin, getAllUsers);

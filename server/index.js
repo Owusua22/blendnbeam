@@ -13,6 +13,8 @@ const cartRoutes = require('./routes/cartRoute');
 const categoryRoutes = require('./routes/category');
 const showroomRoutes = require('./routes/showroom');
 const shippingRoutes = require('./routes/shipping');
+const bannerRoutes = require('./routes/bannerRoutes');
+
 
 // Connect to database
 connectDB();
@@ -25,14 +27,10 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // Root route
-app.get('/', (req, res) => {
-  res.json({ message: 'Welcome to BlendnBeam API!' });
-});
+// app.get('/', (req, res) => {
+//   res.json({ message: 'Welcome to BlendnBeam API!' });
+// });
 
-// Health check endpoint
-app.get('/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: Date.now() });
-});
 
 // API Routes
 app.use('/api/users', authRoutes);
@@ -42,6 +40,7 @@ app.use('/api/cart', cartRoutes);
 app.use('/api/categories', categoryRoutes);
 app.use('/api/showrooms', showroomRoutes);
 app.use('/api/shipping', shippingRoutes);
+app.use('/api/banners', bannerRoutes);
 
 // Global error handler
 app.use((err, req, res, next) => {

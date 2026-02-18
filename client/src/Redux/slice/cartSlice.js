@@ -1,13 +1,6 @@
-// Redux/slice/cartSlice.js
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
-import {
-  getCart,
-  addToCart,
-  updateCartItem,
-  removeFromCart,
-  clearCart,
-} from "../../api";
-import { createOrderThunk } from "./orderSlice"; // adjust path if needed
+import { getCart, addToCart, updateCartItem, removeFromCart, clearCart } from "../../api";
+import { createOrderThunk } from "./orderSlice";
 
 const getToken = (getState) => getState().auth.userInfo?.token;
 
@@ -15,9 +8,7 @@ const CART_CACHE_KEY = "app:cart:v1";
 
 const loadCartFromCache = () => {
   try {
-    const raw =
-      typeof localStorage !== "undefined" &&
-      localStorage.getItem(CART_CACHE_KEY);
+    const raw = typeof localStorage !== "undefined" && localStorage.getItem(CART_CACHE_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
     if (parsed && Array.isArray(parsed.items)) return parsed;
@@ -28,8 +19,7 @@ const loadCartFromCache = () => {
 const saveCartToCache = (cart) => {
   try {
     if (!cart) {
-      if (typeof localStorage !== "undefined")
-        localStorage.removeItem(CART_CACHE_KEY);
+      if (typeof localStorage !== "undefined") localStorage.removeItem(CART_CACHE_KEY);
       return;
     }
     if (typeof localStorage !== "undefined") {
@@ -38,99 +28,30 @@ const saveCartToCache = (cart) => {
   } catch {}
 };
 
-// ---------------- Thunks ----------------
+// ✅ Always return a string error message
+const getErrMsg = (err, fallback = "Request failed") => {
+  const msg =
+    err?.response?.data?.message ||
+    err?.response?.data?.error ||
+    (typeof err?.response?.data === "string" ? err.response.data : null) ||
+    err?.message ||
+    fallback;
 
-export const fetchCart = createAsyncThunk(
-  "cart/fetchCart",
-  async (_, { getState, rejectWithValue }) => {
-    try {
-      const token = getToken(getState);
-      if (!token) return rejectWithValue("Not authenticated");
-      const data = await getCart(token);
-      return normalizeCart(data ?? null);
-    } catch (err) {
-      return rejectWithValue(err?.response?.data || err.message);
-    }
-  }
-);
-
-export const addItemToCart = createAsyncThunk(
-  "cart/addItemToCart",
-  async (
-    { productId, quantity, color, size, price, sizePrice, variantId },
-    { getState, rejectWithValue }
-  ) => {
-    try {
-      const token = getToken(getState);
-      if (!token) return rejectWithValue("Not authenticated");
-      const data = await addToCart(
-        { productId, quantity, color, size, price, sizePrice, variantId },
-        token
-      );
-      return normalizeCart(data ?? null);
-    } catch (err) {
-      return rejectWithValue(err?.response?.data || err.message);
-    }
-  }
-);
-
-export const updateCartItemQty = createAsyncThunk(
-  "cart/updateCartItemQty",
-  async ({ itemId, quantity }, { getState, rejectWithValue }) => {
-    try {
-      const token = getToken(getState);
-      if (!token) return rejectWithValue("Not authenticated");
-      const data = await updateCartItem(itemId, quantity, token);
-      return normalizeCart(data ?? null);
-    } catch (err) {
-      return rejectWithValue(err?.response?.data || err.message);
-    }
-  }
-);
-
-export const removeCartItem = createAsyncThunk(
-  "cart/removeCartItem",
-  async (itemId, { getState, rejectWithValue }) => {
-    try {
-      const token = getToken(getState);
-      if (!token) return rejectWithValue("Not authenticated");
-      const data = await removeFromCart(itemId, token);
-      return normalizeCart(data ?? null);
-    } catch (err) {
-      return rejectWithValue(err?.response?.data || err.message);
-    }
-  }
-);
-
-export const clearUserCart = createAsyncThunk(
-  "cart/clearUserCart",
-  async (_, { getState, rejectWithValue }) => {
-    try {
-      const token = getToken(getState);
-      if (!token) return rejectWithValue("Not authenticated");
-      await clearCart(token); // clears in DB
-      return null; // clear client state
-    } catch (err) {
-      return rejectWithValue(err?.response?.data || err.message);
-    }
-  }
-);
+  return String(msg);
+};
 
 // ---------------- Helper ----------------
-
 const normalizeCart = (cart) => {
   if (!cart) return null;
 
   const items = (cart.items || []).map((item) => {
     let finalPrice = 0;
+
     if (item.sizePrice !== undefined && item.sizePrice !== null) {
       finalPrice = Number(item.sizePrice);
     } else if (item.price !== undefined && item.price !== null) {
       finalPrice = Number(item.price);
-    } else if (
-      item.product?.price !== undefined &&
-      item.product?.price !== null
-    ) {
+    } else if (item.product?.price !== undefined && item.product?.price !== null) {
       finalPrice = Number(item.product.price);
     }
 
@@ -139,7 +60,7 @@ const normalizeCart = (cart) => {
       product: item.product?._id || item.product,
       name: item.product?.name || item.name || "Unknown Product",
       image: item.product?.images?.[0]?.url || item.image || "/placeholder.jpg",
-      price: finalPrice,
+      price: Number.isFinite(finalPrice) ? finalPrice : 0,
       quantity: Number(item.quantity) || 0,
       color: item.color || null,
       size: item.size || null,
@@ -152,6 +73,7 @@ const normalizeCart = (cart) => {
     (sum, i) => sum + (Number(i.price) || 0) * (Number(i.quantity) || 0),
     0
   );
+
   const shippingPrice = Number(cart.shippingPrice) || 0;
   const taxPrice = Number(cart.taxPrice) || 0;
   const totalAmount = itemsPrice + shippingPrice + taxPrice;
@@ -167,6 +89,87 @@ const normalizeCart = (cart) => {
   };
 };
 
+// ---------------- Thunks ----------------
+
+export const fetchCart = createAsyncThunk(
+  "cart/fetchCart",
+  async (_, { getState, rejectWithValue }) => {
+    try {
+      const token = getToken(getState);
+      if (!token) return rejectWithValue("Not authenticated");
+
+      const data = await getCart(token);
+      return normalizeCart(data ?? null);
+    } catch (err) {
+      return rejectWithValue(getErrMsg(err, "Failed to load cart"));
+    }
+  }
+);
+
+export const addItemToCart = createAsyncThunk(
+  "cart/addItemToCart",
+  async ({ productId, quantity, color, size, price, sizePrice, variantId }, { getState, rejectWithValue }) => {
+    try {
+      const token = getToken(getState);
+      if (!token) return rejectWithValue("Not authenticated");
+
+      const data = await addToCart(
+        { productId, quantity, color, size, price, sizePrice, variantId },
+        token
+      );
+
+      return normalizeCart(data ?? null);
+    } catch (err) {
+      return rejectWithValue(getErrMsg(err, "Failed to add item to cart"));
+    }
+  }
+);
+
+export const updateCartItemQty = createAsyncThunk(
+  "cart/updateCartItemQty",
+  async ({ itemId, quantity }, { getState, rejectWithValue }) => {
+    try {
+      const token = getToken(getState);
+      if (!token) return rejectWithValue("Not authenticated");
+
+      const data = await updateCartItem(itemId, quantity, token);
+      return normalizeCart(data ?? null);
+    } catch (err) {
+      return rejectWithValue(getErrMsg(err, "Failed to update quantity"));
+    }
+  }
+);
+
+export const removeCartItem = createAsyncThunk(
+  "cart/removeCartItem",
+  async (itemId, { getState, rejectWithValue }) => {
+    try {
+      const token = getToken(getState);
+      if (!token) return rejectWithValue("Not authenticated");
+
+      const data = await removeFromCart(itemId, token);
+      return normalizeCart(data ?? null);
+    } catch (err) {
+      return rejectWithValue(getErrMsg(err, "Failed to remove item"));
+    }
+  }
+);
+
+export const clearUserCart = createAsyncThunk(
+  "cart/clearUserCart",
+  async (_, { getState, rejectWithValue }) => {
+    try {
+      const token = getToken(getState);
+      if (!token) return rejectWithValue("Not authenticated");
+
+      await clearCart(token);
+      return null;
+    } catch (err) {
+      return rejectWithValue(getErrMsg(err, "Failed to clear cart"));
+    }
+  }
+);
+
 // ---------------- Slice ----------------
 
 const cartSlice = createSlice({
@@ -174,7 +177,7 @@ const cartSlice = createSlice({
   initialState: {
     cart: loadCartFromCache(),
     loading: false,
-    error: null,
+    error: null, // ✅ now always string
     lastSyncedAt: 0,
   },
   reducers: {
@@ -185,21 +188,27 @@ const cartSlice = createSlice({
       state.lastSyncedAt = 0;
       saveCartToCache(null);
     },
+    clearCartError: (state) => {
+      state.error = null;
+    },
   },
   extraReducers: (builder) => {
     const pending = (state) => {
       state.loading = true;
       state.error = null;
     };
+
     const fulfilled = (state, action) => {
       state.loading = false;
       state.cart = action.payload;
       state.lastSyncedAt = Date.now();
       saveCartToCache(action.payload);
     };
+
     const rejected = (state, action) => {
       state.loading = false;
-      state.error = action.payload;
+      state.error = action.payload || "Request failed";
+
       if (action.payload === "Not authenticated") {
         state.cart = null;
         saveCartToCache(null);
@@ -232,7 +241,7 @@ const cartSlice = createSlice({
       })
       .addCase(clearUserCart.rejected, rejected)
 
-      // Safety-net: when an order is successfully created, snap client cart to empty
+      // when order is created, clear cart
       .addCase(createOrderThunk.fulfilled, (state) => {
         state.loading = false;
         state.cart = null;
@@ -242,5 +251,5 @@ const cartSlice = createSlice({
   },
 });
 
-export const { resetCartState } = cartSlice.actions;
+export const { resetCartState, clearCartError } = cartSlice.actions;
 export default cartSlice.reducer;

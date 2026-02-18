@@ -4,7 +4,8 @@ import {
   getAllOrders,
   getUserOrders,
   getOrderById,
-  markOrderPaid,
+ setOrderPaidStatus,
+ cancelOrder,
   updateOrderStatus,
 } from "../../api";
 
@@ -72,17 +73,17 @@ export const fetchOrderByIdThunk = createAsyncThunk(
   }
 );
 
-// Mark order as paid
-export const markOrderPaidThunk = createAsyncThunk(
-  "orders/markPaid",
-  async ({ id, paymentResult, token }, { rejectWithValue }) => {
+export const toggleOrderPaidThunk = createAsyncThunk(
+  "orders/togglePaid",
+  async ({ id, isPaid, token }, { rejectWithValue }) => {
     try {
-      return await markOrderPaid(id, paymentResult, token);
+      return await setOrderPaidStatus(id, isPaid, token);
     } catch (err) {
       return rejectWithValue(err.response?.data?.message || err.message);
     }
   }
 );
+
 
 // Update order status (Admin)
 export const updateOrderStatusThunk = createAsyncThunk(
@@ -95,6 +96,19 @@ export const updateOrderStatusThunk = createAsyncThunk(
     }
   }
 );
+// Cancel order (User only)
+export const cancelOrderThunk = createAsyncThunk(
+  "orders/cancelOrder",
+  async ({ id, token }, { rejectWithValue }) => {
+    try {
+      return await cancelOrder(id, token);
+    } catch (err) {
+      return rejectWithValue(err.response?.data?.message || err.message);
+    }
+  }
+);
+
+
 
 // ---------------- Slice ----------------
 
@@ -172,28 +186,12 @@ const orderSlice = createSlice({
         state.error = action.payload;
       })
 
-      // Mark order as paid
-      .addCase(markOrderPaidThunk.pending, (state) => {
+  
+      // Toggle order paid status (Admin)
+      .addCase(toggleOrderPaidThunk.pending, (state) => {
         state.loading = true;
       })
-      .addCase(markOrderPaidThunk.fulfilled, (state, action) => {
-        state.loading = false;
-        state.success = true;
-        state.currentOrder = action.payload;
-        // Update in userOrders and orders arrays
-        state.userOrders = state.userOrders.map(o => o._id === action.payload._id ? action.payload : o);
-        state.orders = state.orders.map(o => o._id === action.payload._id ? action.payload : o);
-      })
-      .addCase(markOrderPaidThunk.rejected, (state, action) => {
-        state.loading = false;
-        state.error = action.payload;
-      })
-
-      // Update order status (Admin)
-      .addCase(updateOrderStatusThunk.pending, (state) => {
-        state.loading = true;
-      })
-      .addCase(updateOrderStatusThunk.fulfilled, (state, action) => {
+      .addCase(toggleOrderPaidThunk.fulfilled, (state, action) => {
         state.loading = false;
         state.success = true;
         // Update order in both lists if exists
@@ -204,6 +202,25 @@ const orderSlice = createSlice({
         }
       })
       .addCase(updateOrderStatusThunk.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload;
+      })
+
+
+      // Cancel order (User only)
+      .addCase(cancelOrderThunk.pending, (state) => {
+        state.loading = true;
+      })
+      .addCase(cancelOrderThunk.fulfilled, (state, action) => {
+        state.loading = false;
+        state.success = true;
+        // Update order in userOrders if exists
+        state.userOrders = state.userOrders.map(o => o._id === action.payload._id ? action.payload : o);
+        if (state.currentOrder?._id === action.payload._id) {
+          state.currentOrder = action.payload;
+        }
+      })
+      .addCase(cancelOrderThunk.rejected, (state, action) => {
         state.loading = false;
         state.error = action.payload;
       });

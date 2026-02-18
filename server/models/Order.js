@@ -47,7 +47,11 @@ const orderSchema = new mongoose.Schema(
     shippingAddress: {
       name: String,
       street: String,
-      
+      city: String,
+      state: String,
+      country: String,
+      phone: String,
+  
     },
 
     paymentMethod: {
@@ -68,11 +72,6 @@ const orderSchema = new mongoose.Schema(
       default: 0,
     },
 
-    taxPrice: {
-      type: Number,
-      required: true,
-      default: 0,
-    },
 
     /* 🔹 Comes from Shipping.deliveryCharge */
     shippingPrice: {
@@ -101,7 +100,7 @@ const orderSchema = new mongoose.Schema(
 
     status: {
       type: String,
-      enum: ['pending', 'processing', 'shipped', 'delivered', 'cancelled'],
+      enum: ['pending', 'processing', 'shipped', 'delivered', 'cancelled','refunded', 'completed', 'not answered'],
       default: 'pending',
     },
   },

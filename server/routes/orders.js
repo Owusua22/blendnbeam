@@ -5,7 +5,10 @@ const {
   getOrderById,
   updateOrderToPaid,
   updateOrderStatus,
-  getAllOrders
+  getAllOrders,
+  cancelOrder,
+  setOrderPaidStatus,
+
 } = require('../controllers/orderController');
 const { protect, admin } = require('../middleware/authMiddleware');
 
@@ -17,6 +20,13 @@ const router = express.Router();
 
 // Create new order
 router.route('/').post(protect, createOrder);
+// Cancel order (User only)
+router.route('/:id/cancel').put(protect, cancelOrder);
+
+// Toggle order paid status (Admin only)
+router.route('/:id/paid').put(protect, admin, setOrderPaidStatus);
+
+
 
 // Get all orders (Admin only)
 router.route('/').get(protect, admin, getAllOrders);

@@ -160,35 +160,42 @@ exports.updateOrderToPaid = asyncHandler(async (req, res) => {
 exports.updateOrderStatus = asyncHandler(async (req, res) => {
   const { status } = req.body;
 
+  const allowedStatuses = [
+    "pending",
+    "processing",
+    "shipped",
+    "delivered",
+    "cancelled",
+    "refunded",
+    "completed",
+    "not answered",
+  ];
+
+  if (!status || !allowedStatuses.includes(status)) {
+    return res.status(400).json({ message: "Invalid status" });
+  }
+
   const order = await Order.findById(req.params.id);
 
   if (!order) {
-    return res.status(404).json({ message: 'Order not found' });
-  }
-
-  const validTransitions = {
-    pending: ['processing', 'cancelled'],
-    processing: ['shipped', 'cancelled'],
-    shipped: ['delivered'],
-    delivered: [],
-    cancelled: [],
-  };
-
-  if (!validTransitions[order.status].includes(status)) {
-    return res.status(400).json({
-      message: `Cannot change status from ${order.status} to ${status}`,
-    });
+    return res.status(404).json({ message: "Order not found" });
   }
 
   order.status = status;
 
-  if (status === 'delivered') {
+  // Delivery flags
+  if (status === "delivered") {
     order.isDelivered = true;
-    order.deliveredAt = Date.now();
+    order.deliveredAt = order.deliveredAt || Date.now();
+  } else {
+    order.isDelivered = false;
+    order.deliveredAt = null;
   }
 
-  if (status === 'cancelled') {
+  // Payment flags (recommended handling)
+  if (status === "cancelled" || status === "refunded") {
     order.isPaid = false;
+    order.paidAt = null;
   }
 
   const updatedOrder = await order.save();
@@ -206,4 +213,57 @@ exports.getAllOrders = asyncHandler(async (req, res) => {
     .sort({ createdAt: -1 });
 
   res.json(orders);
+});
+/* ===================================================
+   CANCEL ORDER (USER)
+   PUT /api/orders/:id/cancel
+   =================================================== */
+exports.cancelOrder = asyncHandler(async (req, res) => {
+  const order = await Order.findById(req.params.id);
+
+  if (!order) return res.status(404).json({ message: "Order not found" });
+
+  // Only owner can cancel
+  if (order.user.toString() !== req.user._id.toString()) {
+    return res.status(403).json({ message: "Not authorized" });
+  }
+
+  // Only allow cancel for these statuses
+  if (!["pending", "processing"].includes(order.status)) {
+    return res.status(400).json({ message: `Cannot cancel a ${order.status} order` });
+  }
+
+  order.status = "cancelled";
+  order.isPaid = false;
+
+  const updated = await order.save();
+  res.json(updated);
+});
+/* ===================================================
+   TOGGLE ORDER PAID (ADMIN)
+   PUT /api/orders/:id/paid
+   Body: { isPaid: true/false }
+   =================================================== */
+exports.setOrderPaidStatus = asyncHandler(async (req, res) => {
+  const { isPaid } = req.body;
+
+  const order = await Order.findById(req.params.id);
+  if (!order) return res.status(404).json({ message: "Order not found" });
+
+  // isPaid must be boolean
+  if (typeof isPaid !== "boolean") {
+    return res.status(400).json({ message: "isPaid must be true or false" });
+  }
+
+  order.isPaid = isPaid;
+
+  // manage paidAt
+  if (isPaid) {
+    order.paidAt = order.paidAt || Date.now();
+  } else {
+    order.paidAt = null;
+  }
+
+  const updated = await order.save();
+  res.json(updated);
 });

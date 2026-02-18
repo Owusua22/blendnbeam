@@ -104,6 +104,67 @@ exports.updateProfile = async (req, res) => {
     return res.status(400).json({ message: error.message });
   }
 };
+// ----------------------------------------
+// REGISTER ADMIN
+// ----------------------------------------
+exports.registerAdmin = async (req, res) => {
+  try {
+    const { name, email, password } = req.body;
+
+    const adminExists = await User.findOne({ email });
+    if (adminExists) {
+      return res.status(400).json({ message: "Admin already exists" });
+    }
+
+    const admin = await User.create({
+      name,
+      email,
+      password,
+      role: "admin", // force admin role
+    });
+
+    res.status(201).json({
+      _id: admin._id,
+      name: admin.name,
+      email: admin.email,
+      role: admin.role,
+      token: generateToken(admin._id),
+    });
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+};
+
+// ----------------------------------------
+// ADMIN LOGIN
+// ----------------------------------------
+exports.adminLogin = async (req, res) => {
+  try {
+    const { email, password } = req.body;
+
+    const admin = await User.findOne({ email });
+
+    if (
+      admin &&
+      admin.role === "admin" &&
+      (await admin.comparePassword(password))
+    ) {
+      return res.json({
+        _id: admin._id,
+        name: admin.name,
+        email: admin.email,
+        role: admin.role,
+        token: generateToken(admin._id),
+      });
+    }
+
+    return res.status(401).json({ message: "Invalid admin credentials" });
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+};
+
+
 
 // ----------------------------------------
 // FETCH ALL USERS (ADMIN ONLY)

@@ -1,3 +1,4 @@
+// src/Pages/CartPage.jsx
 import React, { useEffect, useMemo, useState } from "react";
 import { useSelector, useDispatch } from "react-redux";
 import {
@@ -25,6 +26,9 @@ const Spinner = ({ size = 24 }) => (
   <Loader2 size={size} className="animate-spin text-emerald-600" />
 );
 
+const normalizeMsg = (err) =>
+  typeof err === "string" ? err : err?.message || "Something went wrong";
+
 const Toast = ({ toast, onClose }) => {
   if (!toast) return null;
   const { type = "info", message = "" } = toast;
@@ -34,7 +38,11 @@ const Toast = ({ toast, onClose }) => {
     info: "bg-slate-800",
   };
   const Icon =
-    type === "success" ? CheckCircle2 : type === "error" ? AlertTriangle : ShoppingBag;
+    type === "success"
+      ? CheckCircle2
+      : type === "error"
+      ? AlertTriangle
+      : ShoppingBag;
 
   return (
     <div className="fixed bottom-4 right-4 z-[60]">
@@ -118,7 +126,7 @@ const ConfirmDialog = ({
   );
 };
 
-const CartPage = () => {
+export default function CartPage() {
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const { cart, loading, error } = useSelector((s) => s.cart);
@@ -132,41 +140,28 @@ const CartPage = () => {
   });
   const [showBreakdown, setShowBreakdown] = useState(false);
 
+  // ✅ always load cart; empty cart is not an error after backend fix
   useEffect(() => {
     dispatch(fetchCart());
   }, [dispatch]);
 
-  const getItemPrice = (item) =>
-    Number(
-      item.price ||
-        item.product?.price ||
-        item.productId?.price ||
-        item.variant?.price ||
-        0
-    ) || 0;
-
-  const getItemName = (i) =>
-    i.name || i.product?.name || i.productId?.name || "Product";
-  const getItemImage = (i) =>
-    i.image ||
-    i.product?.images?.[0]?.url ||
-    i.productId?.images?.[0]?.url ||
-    "/placeholder.png";
+  const getItemPrice = (item) => Number(item?.price ?? 0) || 0;
+  const getItemName = (i) => i?.name || "Product";
+  const getItemImage = (i) => i?.image || "/placeholder.png";
   const formatPrice = (n) => Number(n || 0).toFixed(2);
 
   const totals = useMemo(() => {
-    if (!cart?.items?.length)
-      return { subtotal: 0, shipping: 0, tax: 0, total: 0 };
-    const subtotal = cart.items.reduce(
+    const items = cart?.items || [];
+    const subtotal = items.reduce(
       (sum, i) => sum + getItemPrice(i) * (Number(i.quantity) || 0),
       0
     );
-    const shipping = Number(cart.shippingPrice) || 0;
-    const tax = Number(cart.taxPrice) || 0;
+    const shipping = Number(cart?.shippingPrice) || 0;
+    const tax = Number(cart?.taxPrice) || 0;
     return { subtotal, shipping, tax, total: subtotal + shipping + tax };
   }, [cart]);
 
-  const showToast = (type, message) => {
+  const showToastMsg = (type, message) => {
     setToast({ type, message });
     setTimeout(() => setToast(null), 2200);
   };
@@ -175,8 +170,8 @@ const CartPage = () => {
     if (quantity < 1) return;
     dispatch(updateCartItemQty({ itemId, quantity }))
       .unwrap()
-      .then(() => showToast("success", "Quantity updated"))
-      .catch((err) => showToast("error", err?.message || "Failed to update"));
+      .then(() => showToastMsg("success", "Quantity updated"))
+      .catch((err) => showToastMsg("error", normalizeMsg(err)));
   };
 
   const askRemove = (itemId) =>
@@ -191,20 +186,23 @@ const CartPage = () => {
     try {
       if (confirm.mode === "remove" && confirm.itemId) {
         await dispatch(removeCartItem(confirm.itemId)).unwrap();
-        showToast("success", "Item removed");
+        showToastMsg("success", "Item removed");
       } else if (confirm.mode === "clear") {
         await dispatch(clearUserCart()).unwrap();
-        showToast("success", "Cart cleared");
+        showToastMsg("success", "Cart cleared");
       }
       closeConfirm();
     } catch (err) {
-      showToast("error", err?.message || "Action failed");
+      showToastMsg("error", normalizeMsg(err));
       setConfirm((s) => ({ ...s, loading: false }));
     }
   };
 
   const handleCheckout = () => navigate("/checkout");
-  const handleContinueShopping = () => navigate("/products");
+  const handleContinueShopping = () => navigate("/");
+
+  // ✅ render-safe error (string or object)
+  const errorMsg = error ? (typeof error === "string" ? error : error?.message) : null;
 
   if (loading) {
     return (
@@ -214,7 +212,8 @@ const CartPage = () => {
     );
   }
 
-  if (error) {
+  // ✅ If backend still returns 404 errors sometimes, treat "Cart not found" as empty UI
+  if (errorMsg && errorMsg !== "Cart not found") {
     return (
       <div className="max-w-5xl mx-auto px-4 py-10">
         <div className="rounded-2xl border border-rose-200 bg-rose-50 p-8 text-center">
@@ -222,7 +221,9 @@ const CartPage = () => {
             <AlertTriangle className="text-rose-600" size={22} />
           </div>
           <h3 className="text-lg font-bold text-rose-700">Error loading cart</h3>
-          <p className="text-gray-700 mt-1">{error}</p>
+          <p className="text-gray-700 mt-1">
+            {errorMsg || "Something went wrong"}
+          </p>
           <button
             onClick={() => dispatch(fetchCart())}
             className="mt-5 inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-emerald-600 text-white font-semibold hover:bg-emerald-700"
@@ -234,6 +235,7 @@ const CartPage = () => {
     );
   }
 
+  // ✅ empty cart UI
   if (!cart?.items?.length) {
     return (
       <div className="max-w-5xl mx-auto px-4 py-12">
@@ -269,7 +271,6 @@ const CartPage = () => {
 
   return (
     <div className="relative min-h-screen bg-slate-50">
-      {/* page content with bottom safe padding for mobile sticky summary */}
       <div className="max-w-6xl mx-auto px-4 pt-6 pb-40 md:pb-10">
         <div className="flex items-center justify-between">
           <div>
@@ -292,7 +293,7 @@ const CartPage = () => {
         </div>
 
         <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-6">
-          {/* items */}
+          {/* Items */}
           <div className="md:col-span-2">
             <div className="space-y-3">
               {cart.items.map((item) => {
@@ -320,6 +321,7 @@ const CartPage = () => {
                             <h3 className="text-base font-semibold text-gray-900 truncate">
                               {getItemName(item)}
                             </h3>
+
                             <div className="mt-1 flex flex-wrap gap-2">
                               {item.color && (
                                 <span className="inline-flex items-center gap-1.5 px-2 py-0.5 text-xs rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700">
@@ -364,9 +366,7 @@ const CartPage = () => {
 
                           <div className="flex items-center rounded-lg overflow-hidden border border-emerald-300 bg-white">
                             <button
-                              onClick={() =>
-                                handleUpdateQuantity(item._id, qty - 1)
-                              }
+                              onClick={() => handleUpdateQuantity(item._id, qty - 1)}
                               disabled={qty <= 1}
                               className="h-9 w-9 grid place-items-center hover:bg-gray-50 disabled:opacity-50"
                               aria-label="Decrease quantity"
@@ -377,9 +377,7 @@ const CartPage = () => {
                               {qty}
                             </div>
                             <button
-                              onClick={() =>
-                                handleUpdateQuantity(item._id, qty + 1)
-                              }
+                              onClick={() => handleUpdateQuantity(item._id, qty + 1)}
                               className="h-9 w-9 grid place-items-center hover:bg-gray-50"
                               aria-label="Increase quantity"
                             >
@@ -395,7 +393,7 @@ const CartPage = () => {
             </div>
           </div>
 
-          {/* desktop summary */}
+          {/* Desktop summary */}
           <div className="hidden md:block md:col-span-1">
             <div className="rounded-2xl border border-emerald-100 bg-white p-5 shadow-sm md:sticky md:top-4">
               <h3 className="text-base font-bold text-gray-900">Order Summary</h3>
@@ -410,22 +408,16 @@ const CartPage = () => {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-600">Shipping</span>
-                  <span className="font-medium">
-                    ₵{formatPrice(totals.shipping)}
-                  </span>
+                  <span className="font-medium">₵{formatPrice(totals.shipping)}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-600">Tax</span>
-                  <span className="font-medium">
-                    ₵{formatPrice(totals.tax)}
-                  </span>
+                  <span className="font-medium">₵{formatPrice(totals.tax)}</span>
                 </div>
 
                 <div className="mt-3 border-t border-emerald-200 pt-3 flex justify-between text-base font-extrabold">
                   <span className="text-gray-900">Total</span>
-                  <span className="text-amber-600">
-                    ₵{formatPrice(totals.total)}
-                  </span>
+                  <span className="text-amber-600">₵{formatPrice(totals.total)}</span>
                 </div>
 
                 <button
@@ -457,9 +449,9 @@ const CartPage = () => {
             </div>
           </div>
         </div>
-      </div>      
+      </div>
 
-      {/* mobile sticky order summary only */}
+      {/* Mobile sticky summary */}
       <div className="md:hidden fixed bottom-0 left-0 right-0 z-50 border-t border-gray-200 bg-white/95 backdrop-blur">
         <div className="max-w-6xl mx-auto px-4 py-3">
           <div className="flex items-center justify-between gap-3">
@@ -500,15 +492,11 @@ const CartPage = () => {
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-600">Shipping</span>
-                <span className="font-medium">
-                  ₵{formatPrice(totals.shipping)}
-                </span>
+                <span className="font-medium">₵{formatPrice(totals.shipping)}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-600">Tax</span>
-                <span className="font-medium">
-                  ₵{formatPrice(totals.tax)}
-                </span>
+                <span className="font-medium">₵{formatPrice(totals.tax)}</span>
               </div>
             </div>
           )}
@@ -528,9 +516,8 @@ const CartPage = () => {
         onConfirm={confirmAction}
         onClose={confirm.loading ? undefined : closeConfirm}
       />
+
       <Toast toast={toast} onClose={() => setToast(null)} />
     </div>
   );
-};
-
-export default CartPage;
+}
