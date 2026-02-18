@@ -27,9 +27,9 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // Root route
-// app.get('/', (req, res) => {
-//   res.json({ message: 'Welcome to BlendnBeam API!' });
-// });
+app.get('/', (req, res) => {
+  res.json({ message: 'Welcome to BlendnBeam API!' });
+});
 
 
 // API Routes
