@@ -23,6 +23,7 @@ import AdminRegisterPage from "./Pages/AdminRegister";
 import AdminLoginPage from "./Pages/AdminLogin";
 import Users from "./Pages/Admin/Users";
 import Banners from "./Pages/Admin/Banners";
+import ProfilePage from "./Pages/ProfilePage";
 
 /** Navbar wrapper: hides Navbar on admin routes */
 function NavbarGate() {
@@ -69,6 +70,7 @@ function App() {
         <Route path="/customer-orders" element={<UserOrdersPage />} />
         <Route path="/cart" element={<CartPage />} />
         <Route path="/product/:id" element={<ProductDetailsPage />} />
+        <Route path= "/profile" element={<ProfilePage />} />
 
         {/* Admin auth routes (no Navbar because /admin/*) */}
         <Route
