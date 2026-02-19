@@ -37,11 +37,11 @@ const orderSchema = new mongoose.Schema(
     note: String,
 
     /* 🔹 Shipping zone mapping */
-    shippingLocation: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'Shipping',
-      required: true,
-    },
+shippingLocation: {
+  type: mongoose.Schema.Types.ObjectId,
+  ref: 'Shipping',
+  default: null,          // ← optional, null when custom location
+},
 
     /* 🔹 Physical delivery address */
     shippingAddress: {

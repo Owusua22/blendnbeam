@@ -1,3 +1,4 @@
+// controllers/orderController.js
 const asyncHandler = require('express-async-handler');
 const Order = require('../models/Order');
 const Cart = require('../models/Cart');
@@ -13,6 +14,8 @@ exports.createOrder = asyncHandler(async (req, res) => {
     orderItems,
     shippingAddress,
     shippingLocationId,
+    customLocationName,
+    shippingPricePending,
     paymentMethod,
     itemsPrice,
     taxPrice = 0,
@@ -27,21 +30,39 @@ exports.createOrder = asyncHandler(async (req, res) => {
     return res.status(400).json({ message: 'No order items provided' });
   }
 
-  if (!shippingLocationId) {
-    return res.status(400).json({ message: 'Shipping location is required' });
+  if (!paymentMethod) {
+    return res.status(400).json({ message: 'Payment method is required' });
   }
 
-  /* 🔹 Validate shipping zone */
-  const shippingLocation = await Shipping.findOne({
-    _id: shippingLocationId,
-    isActive: true,
-  });
+  // ✅ Must have either a shipping zone OR a custom location
+  const hasShippingZone = !!shippingLocationId;
+  const hasCustomLocation = !!(customLocationName && customLocationName.trim());
 
-  if (!shippingLocation) {
-    return res
-      .status(404)
-      .json({ message: 'Invalid or inactive shipping location' });
+  if (!hasShippingZone && !hasCustomLocation) {
+    return res.status(400).json({
+      message: 'Please select a delivery zone or enter your location',
+    });
   }
+
+  /* 🔹 Resolve shipping zone (if selected) */
+  let shippingLocation = null;
+  let shippingPrice = 0;
+
+  if (hasShippingZone) {
+    shippingLocation = await Shipping.findOne({
+      _id: shippingLocationId,
+      isActive: true,
+    });
+
+    if (!shippingLocation) {
+      return res
+        .status(404)
+        .json({ message: 'Invalid or inactive shipping location' });
+    }
+
+    shippingPrice = shippingLocation.deliveryCharge || 0;
+  }
+  // ✅ If custom location: shippingPrice stays 0, pending seller confirmation
 
   /* 🔹 Format order items */
   const formattedItems = orderItems.map((item) => ({
@@ -54,8 +75,7 @@ exports.createOrder = asyncHandler(async (req, res) => {
     size: item.size,
   }));
 
-  /* 🔹 Pricing (SERVER CONTROLLED) */
-  const shippingPrice = shippingLocation.deliveryCharge;
+  /* 🔹 Pricing */
   const totalPrice = itemsPrice + taxPrice + shippingPrice;
 
   const order = await Order.create({
@@ -64,8 +84,13 @@ exports.createOrder = asyncHandler(async (req, res) => {
     orderItems: formattedItems,
     note,
 
-    shippingLocation: shippingLocation._id,
+    // ✅ Shipping zone (null when custom location)
+    shippingLocation: shippingLocation ? shippingLocation._id : null,
     shippingAddress,
+
+    // ✅ Custom location fields
+    customLocationName: hasCustomLocation ? customLocationName.trim() : null,
+    shippingPricePending: hasCustomLocation ? true : false,
 
     paymentMethod,
     itemsPrice,
@@ -76,10 +101,19 @@ exports.createOrder = asyncHandler(async (req, res) => {
     status: 'pending',
   });
 
-  await order.populate([
+  // ✅ Populate — handle shippingLocation being null
+  const populateFields = [
     { path: 'user', select: 'name email phone' },
-    { path: 'shippingLocation', select: 'name deliveryCharge estimate' },
-  ]);
+  ];
+
+  if (shippingLocation) {
+    populateFields.push({
+      path: 'shippingLocation',
+      select: 'name deliveryCharge estimate',
+    });
+  }
+
+  await order.populate(populateFields);
 
   res.status(201).json(order);
 });
@@ -161,30 +195,29 @@ exports.updateOrderStatus = asyncHandler(async (req, res) => {
   const { status } = req.body;
 
   const allowedStatuses = [
-    "pending",
-    "processing",
-    "shipped",
-    "delivered",
-    "cancelled",
-    "refunded",
-    "completed",
-    "not answered",
+    'pending',
+    'processing',
+    'shipped',
+    'delivered',
+    'cancelled',
+    'refunded',
+    'completed',
+    'not answered',
   ];
 
   if (!status || !allowedStatuses.includes(status)) {
-    return res.status(400).json({ message: "Invalid status" });
+    return res.status(400).json({ message: 'Invalid status' });
   }
 
   const order = await Order.findById(req.params.id);
 
   if (!order) {
-    return res.status(404).json({ message: "Order not found" });
+    return res.status(404).json({ message: 'Order not found' });
   }
 
   order.status = status;
 
-  // Delivery flags
-  if (status === "delivered") {
+  if (status === 'delivered') {
     order.isDelivered = true;
     order.deliveredAt = order.deliveredAt || Date.now();
   } else {
@@ -192,13 +225,45 @@ exports.updateOrderStatus = asyncHandler(async (req, res) => {
     order.deliveredAt = null;
   }
 
-  // Payment flags (recommended handling)
-  if (status === "cancelled" || status === "refunded") {
+  if (status === 'cancelled' || status === 'refunded') {
     order.isPaid = false;
     order.paidAt = null;
   }
 
   const updatedOrder = await order.save();
+  res.json(updatedOrder);
+});
+
+/* ===================================================
+   UPDATE ORDER SHIPPING PRICE (ADMIN)
+   PUT /api/orders/:id/shipping-price
+   Body: { shippingPrice: 25.00 }
+   =================================================== */
+exports.updateOrderShippingPrice = asyncHandler(async (req, res) => {
+  const { shippingPrice } = req.body;
+
+  if (shippingPrice == null || typeof shippingPrice !== 'number' || shippingPrice < 0) {
+    return res.status(400).json({ message: 'Valid shipping price is required' });
+  }
+
+  const order = await Order.findById(req.params.id);
+
+  if (!order) {
+    return res.status(404).json({ message: 'Order not found' });
+  }
+
+  // Update shipping price and recalculate total
+  order.shippingPrice = shippingPrice;
+  order.totalPrice = order.itemsPrice + order.taxPrice + shippingPrice;
+  order.shippingPricePending = false;
+
+  const updatedOrder = await order.save();
+
+  await updatedOrder.populate([
+    { path: 'user', select: 'name email phone' },
+    { path: 'shippingLocation', select: 'name deliveryCharge estimate' },
+  ]);
+
   res.json(updatedOrder);
 });
 
@@ -214,6 +279,7 @@ exports.getAllOrders = asyncHandler(async (req, res) => {
 
   res.json(orders);
 });
+
 /* ===================================================
    CANCEL ORDER (USER)
    PUT /api/orders/:id/cancel
@@ -221,24 +287,25 @@ exports.getAllOrders = asyncHandler(async (req, res) => {
 exports.cancelOrder = asyncHandler(async (req, res) => {
   const order = await Order.findById(req.params.id);
 
-  if (!order) return res.status(404).json({ message: "Order not found" });
+  if (!order) return res.status(404).json({ message: 'Order not found' });
 
-  // Only owner can cancel
   if (order.user.toString() !== req.user._id.toString()) {
-    return res.status(403).json({ message: "Not authorized" });
+    return res.status(403).json({ message: 'Not authorized' });
   }
 
-  // Only allow cancel for these statuses
-  if (!["pending", "processing"].includes(order.status)) {
-    return res.status(400).json({ message: `Cannot cancel a ${order.status} order` });
+  if (!['pending', 'processing'].includes(order.status)) {
+    return res
+      .status(400)
+      .json({ message: `Cannot cancel a ${order.status} order` });
   }
 
-  order.status = "cancelled";
+  order.status = 'cancelled';
   order.isPaid = false;
 
   const updated = await order.save();
   res.json(updated);
 });
+
 /* ===================================================
    TOGGLE ORDER PAID (ADMIN)
    PUT /api/orders/:id/paid
@@ -248,16 +315,14 @@ exports.setOrderPaidStatus = asyncHandler(async (req, res) => {
   const { isPaid } = req.body;
 
   const order = await Order.findById(req.params.id);
-  if (!order) return res.status(404).json({ message: "Order not found" });
+  if (!order) return res.status(404).json({ message: 'Order not found' });
 
-  // isPaid must be boolean
-  if (typeof isPaid !== "boolean") {
-    return res.status(400).json({ message: "isPaid must be true or false" });
+  if (typeof isPaid !== 'boolean') {
+    return res.status(400).json({ message: 'isPaid must be true or false' });
   }
 
   order.isPaid = isPaid;
 
-  // manage paidAt
   if (isPaid) {
     order.paidAt = order.paidAt || Date.now();
   } else {

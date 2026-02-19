@@ -82,9 +82,6 @@ export const removeProduct = createAsyncThunk(
   }
 );
 
-/**
- * Per-category cache: returns { categoryId, data }
- */
 export const fetchProductsByCategory = createAsyncThunk(
   "products/fetchByCategory",
   async (categoryId, { rejectWithValue }) => {
@@ -130,26 +127,23 @@ export const fetchProductsByShowroom = createAsyncThunk(
 /* ---------------- Initial State ---------------- */
 
 const initialState = {
-  // all or last fetchAll/search
   products: [],
 
-  // per-showroom cache
-  productsByShowroom: {}, // { [showroomId]: Product[] }
+  productsByShowroom: {},
   loadingProductsByShowroom: false,
   errorProductsByShowroom: null,
 
-  // per-category cache
-  productsByCategory: {}, // { [categoryId]: Product[] }
-  loadingProductsByCategory: {}, // { [categoryId]: boolean }
-  errorProductsByCategory: {}, // { [categoryId]: string | null }
+  productsByCategory: {},
+  loadingProductsByCategory: {},
+  errorProductsByCategory: {},
 
-  // search
   searchResults: [],
   lastSearchQuery: "",
   loadingSearch: false,
 
   // single product
   product: null,
+  currentProductId: null, // ✅ Added: tracks which product ID we're loading/displaying
 
   // global flags & error
   loadingProducts: false,
@@ -171,7 +165,18 @@ const removeProductFromArray = (array, id) =>
 const productSlice = createSlice({
   name: "products",
   initialState,
-  reducers: {},
+  reducers: {
+    // ✅ Added: clears single product state so navigation shows skeleton
+    clearProduct: (state) => {
+      state.product = null;
+      state.currentProductId = null;
+      state.error = null;
+    },
+    // ✅ Added: clears just the error
+    clearError: (state) => {
+      state.error = null;
+    },
+  },
   extraReducers: (builder) => {
     builder
       /* FETCH ALL PRODUCTS */
@@ -189,20 +194,26 @@ const productSlice = createSlice({
       })
 
       /* FETCH PRODUCT BY ID */
-      .addCase(fetchProductById.pending, (state) => {
+      .addCase(fetchProductById.pending, (state, action) => {
         state.loadingProduct = true;
         state.error = null;
+        // ✅ Track which product ID is being fetched
+        state.currentProductId = action.meta.arg;
       })
       .addCase(fetchProductById.fulfilled, (state, action) => {
         state.loadingProduct = false;
         state.product = action.payload;
+        // ✅ Update to the actual product ID from response
+        state.currentProductId = action.payload?._id || null;
+        state.error = null;
       })
       .addCase(fetchProductById.rejected, (state, action) => {
         state.loadingProduct = false;
         state.error = action.payload;
+        state.product = null;
       })
 
-      /* FETCH BY CATEGORY (per-category cache only) */
+      /* FETCH BY CATEGORY */
       .addCase(fetchProductsByCategory.pending, (state, action) => {
         const categoryId = action.meta.arg;
         state.loadingProductsByCategory[categoryId] = true;
@@ -212,7 +223,6 @@ const productSlice = createSlice({
         const { categoryId, data } = action.payload;
         state.loadingProductsByCategory[categoryId] = false;
         state.productsByCategory[categoryId] = data || [];
-        // ❌ DO NOT modify state.products here
       })
       .addCase(fetchProductsByCategory.rejected, (state, action) => {
         const categoryId = action.meta.arg;
@@ -246,7 +256,6 @@ const productSlice = createSlice({
         const { query, data } = action.payload;
         state.lastSearchQuery = query;
         state.searchResults = data || [];
-        // ❌ DO NOT override state.products here either
       })
       .addCase(searchProducts.rejected, (state, action) => {
         state.loadingSearch = false;
@@ -261,11 +270,7 @@ const productSlice = createSlice({
       .addCase(addProduct.fulfilled, (state, action) => {
         state.updatingProduct = false;
         const newProduct = action.payload;
-
-        // Add to general list
         state.products.unshift(newProduct);
-
-        // Add to category cache if possible
         const catId =
           typeof newProduct.category === "string"
             ? newProduct.category
@@ -287,19 +292,13 @@ const productSlice = createSlice({
       .addCase(editProduct.fulfilled, (state, action) => {
         state.updatingProduct = false;
         const updated = action.payload;
-
-        // Update in general list
         state.products = updateProductInArray(state.products, updated);
-
-        // Update in category caches
         Object.keys(state.productsByCategory).forEach((catId) => {
           state.productsByCategory[catId] = updateProductInArray(
             state.productsByCategory[catId],
             updated
           );
         });
-
-        // Update in showroom caches
         Object.keys(state.productsByShowroom).forEach((showroomId) => {
           state.productsByShowroom[showroomId] = updateProductInArray(
             state.productsByShowroom[showroomId],
@@ -320,19 +319,13 @@ const productSlice = createSlice({
       .addCase(removeProduct.fulfilled, (state, action) => {
         state.updatingProduct = false;
         const id = action.payload;
-
-        // Remove from general list
         state.products = removeProductFromArray(state.products, id);
-
-        // Remove from categories
         Object.keys(state.productsByCategory).forEach((catId) => {
           state.productsByCategory[catId] = removeProductFromArray(
             state.productsByCategory[catId],
             id
           );
         });
-
-        // Remove from showrooms
         Object.keys(state.productsByShowroom).forEach((showroomId) => {
           state.productsByShowroom[showroomId] = removeProductFromArray(
             state.productsByShowroom[showroomId],
@@ -347,4 +340,6 @@ const productSlice = createSlice({
   },
 });
 
+// ✅ Export the new actions
+export const { clearProduct, clearError } = productSlice.actions;
 export default productSlice.reducer;

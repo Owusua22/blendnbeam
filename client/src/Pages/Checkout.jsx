@@ -7,7 +7,6 @@ import { useNavigate } from "react-router-dom";
 import {
   CreditCard,
   Smartphone,
-  HandCoins,
   ShoppingCart,
   MapPin,
   Phone,
@@ -17,7 +16,6 @@ import {
   Loader2,
   ArrowLeft,
   Shield,
-  Package,
   ChevronDown,
   ChevronUp,
   Clock,
@@ -155,6 +153,7 @@ const CheckoutPage = () => {
       window.scrollTo({ top: 0, behavior: "smooth" });
       return;
     }
+
     const orderData = {
       cartId: cartState?._id,
       paymentMethod,
@@ -169,7 +168,8 @@ const CheckoutPage = () => {
         phone,
         landmark,
       },
-      customLocationName: otherLocation ? customLocation : null,
+      // ✅ Send the user's custom location text to the backend
+      customLocationName: otherLocation ? customLocation.trim() : null,
       shippingPricePending: otherLocation,
       itemsPrice,
       taxPrice,
@@ -183,9 +183,11 @@ const CheckoutPage = () => {
         size: item.size,
       })),
     };
+
     dispatch(createOrderThunk({ orderData, token: userInfo?.token }));
   };
 
+  // ✅ Removed badgeText and badgeBg from all payment options
   const paymentOptions = [
     {
       value: "card",
@@ -198,8 +200,6 @@ const CheckoutPage = () => {
       activeRing: "ring-blue-200",
       activeBg: "bg-gradient-to-br from-blue-50 to-indigo-50",
       iconColor: "text-blue-600",
-      badgeText: "Popular",
-      badgeBg: "bg-blue-100 text-blue-700",
     },
     {
       value: "mobile_money",
@@ -212,8 +212,6 @@ const CheckoutPage = () => {
       activeRing: "ring-amber-200",
       activeBg: "bg-gradient-to-br from-amber-50 to-orange-50",
       iconColor: "text-amber-600",
-      badgeText: "Fastest",
-      badgeBg: "bg-amber-100 text-amber-700",
     },
     {
       value: "cash_on_delivery",
@@ -226,8 +224,6 @@ const CheckoutPage = () => {
       activeRing: "ring-emerald-200",
       activeBg: "bg-gradient-to-br from-emerald-50 to-teal-50",
       iconColor: "text-emerald-600",
-      badgeText: null,
-      badgeBg: "",
     },
   ];
 
@@ -313,39 +309,55 @@ const CheckoutPage = () => {
           <span className="text-gray-500 flex items-center gap-1">
             <Truck size={13} /> Shipping
           </span>
+          {/* ✅ Changed from "TBD" to descriptive message */}
           <span
             className={`font-medium ${
               shippingPrice === null
-                ? "text-amber-600"
+                ? "text-amber-600 text-xs"
                 : shippingPrice === 0
-                ? "text-emerald-600"
-                : ""
+                  ? "text-emerald-600"
+                  : ""
             }`}
           >
             {shippingPrice === null
-              ? "TBD"
+              ? "Provided by seller"
               : shippingPrice === 0
-              ? "Free"
-              : `₵${formatCurrency(shippingPrice)}`}
+                ? "Free"
+                : `₵${formatCurrency(shippingPrice)}`}
           </span>
         </div>
         <div className="border-t border-gray-200 pt-3 mt-1 flex justify-between items-center">
           <span className="font-bold text-gray-900">Total</span>
-          <span
-            className={`font-extrabold text-emerald-700 ${
-              compact ? "text-lg" : "text-xl"
-            }`}
-          >
-            ₵{formatCurrency(totalPrice)}
-          </span>
+          <div className="text-right">
+            <span
+              className={`font-extrabold text-emerald-700 ${
+                compact ? "text-lg" : "text-xl"
+              }`}
+            >
+              ₵{formatCurrency(totalPrice)}
+            </span>
+            {shippingPrice === null && (
+              <span className="block text-[10px] text-amber-600 font-medium">
+                excluding shipping
+              </span>
+            )}
+          </div>
         </div>
+        {/* ✅ Updated info message */}
         {shippingPrice === null && (
           <p className="flex items-start gap-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2.5 mt-2">
             <Info
               size={13}
               className="text-amber-500 mt-0.5 flex-shrink-0"
             />
-            Shipping will be confirmed by the seller
+            <span>
+              Delivery fee will be provided by the seller after confirming
+              your location
+              {customLocation ? (
+                <span className="font-semibold"> ({customLocation})</span>
+              ) : null}
+              .
+            </span>
           </p>
         )}
       </div>
@@ -414,7 +426,9 @@ const CheckoutPage = () => {
                   <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-600 flex items-center justify-center">
                     <MapPin size={16} />
                   </div>
-                  <h2 className="font-bold text-gray-900">Shipping Details</h2>
+                  <h2 className="font-bold text-gray-900">
+                    Shipping Details
+                  </h2>
                 </div>
                 <div className="p-5 md:p-6 space-y-4">
                   <label className="flex items-center gap-3 p-3 rounded-xl bg-gray-50 border border-gray-100 cursor-pointer hover:bg-gray-100/60 transition-colors select-none">
@@ -477,7 +491,8 @@ const CheckoutPage = () => {
 
                   <div>
                     <label className="text-sm font-medium text-gray-700 mb-1.5 block">
-                      Street Address <span className="text-rose-500">*</span>
+                      Street Address{" "}
+                      <span className="text-rose-500">*</span>
                     </label>
                     <div className="relative">
                       <MapPin
@@ -497,7 +512,8 @@ const CheckoutPage = () => {
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                       <label className="text-sm font-medium text-gray-700 mb-1.5 block">
-                        City / Town <span className="text-rose-500">*</span>
+                        City / Town{" "}
+                        <span className="text-rose-500">*</span>
                       </label>
                       <input
                         type="text"
@@ -643,21 +659,41 @@ const CheckoutPage = () => {
 
                   {otherLocation && (
                     <div className="space-y-3 pl-7">
-                      <input
-                        type="text"
-                        value={customLocation}
-                        onChange={(e) => setCustomLocation(e.target.value)}
-                        placeholder="e.g. Adenta New Site"
-                        className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-400 transition-all"
-                      />
+                      <div>
+                        <label className="text-sm font-medium text-gray-700 mb-1.5 block">
+                          Your Location{" "}
+                          <span className="text-rose-500">*</span>
+                        </label>
+                        <div className="relative">
+                          <MapPin
+                            size={15}
+                            className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+                          />
+                          <input
+                            type="text"
+                            value={customLocation}
+                            onChange={(e) =>
+                              setCustomLocation(e.target.value)
+                            }
+                            placeholder="e.g. Adenta New Site"
+                            className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-400 transition-all"
+                          />
+                        </div>
+                      </div>
+                      {/* ✅ Updated message to reflect what happens */}
                       <div className="flex items-start gap-2 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-xl p-3">
                         <Info
                           size={14}
                           className="text-amber-600 mt-0.5 flex-shrink-0"
                         />
                         <span>
-                          Shipping fee will be calculated by the seller
-                          after confirming your location.
+                          Your location{" "}
+                          {customLocation.trim() ? (
+                            <strong>"{customLocation.trim()}"</strong>
+                          ) : null}{" "}
+                          will be sent to the seller. The delivery fee will
+                          be provided by the seller after confirming your
+                          location.
                         </span>
                       </div>
                     </div>
@@ -721,25 +757,17 @@ const CheckoutPage = () => {
                               <div className="absolute inset-0 rounded-xl bg-gradient-to-tr from-white/0 via-white/20 to-white/0" />
                             )}
                           </div>
+                          {/* ✅ Removed badge tags — just label + subtitle */}
                           <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2">
-                              <span
-                                className={`font-semibold transition-colors ${
-                                  selected
-                                    ? "text-gray-900"
-                                    : "text-gray-700 group-hover:text-gray-900"
-                                }`}
-                              >
-                                {opt.label}
-                              </span>
-                              {opt.badgeText && (
-                                <span
-                                  className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wide ${opt.badgeBg}`}
-                                >
-                                  {opt.badgeText}
-                                </span>
-                              )}
-                            </div>
+                            <span
+                              className={`font-semibold transition-colors ${
+                                selected
+                                  ? "text-gray-900"
+                                  : "text-gray-700 group-hover:text-gray-900"
+                              }`}
+                            >
+                              {opt.label}
+                            </span>
                             <p className="text-xs text-gray-500 mt-0.5">
                               {opt.sub}
                             </p>
@@ -763,8 +791,6 @@ const CheckoutPage = () => {
                       );
                     })}
                   </div>
-
-                  
                 </div>
               </section>
 
@@ -787,6 +813,7 @@ const CheckoutPage = () => {
                         {cartItems.length} item
                         {cartItems.length !== 1 ? "s" : ""} · ₵
                         {formatCurrency(totalPrice)}
+                        {shippingPrice === null && " + shipping"}
                       </p>
                     </div>
                   </div>
@@ -818,35 +845,49 @@ const CheckoutPage = () => {
                       <span className="text-gray-500 flex items-center gap-1">
                         <Truck size={13} /> Shipping
                       </span>
+                      {/* ✅ Updated mobile shipping display */}
                       <span
                         className={`font-medium ${
                           shippingPrice === null
-                            ? "text-amber-600"
+                            ? "text-amber-600 text-xs"
                             : shippingPrice === 0
-                            ? "text-emerald-600"
-                            : ""
+                              ? "text-emerald-600"
+                              : ""
                         }`}
                       >
                         {shippingPrice === null
-                          ? "TBD"
+                          ? "Provided by seller"
                           : shippingPrice === 0
-                          ? "Free"
-                          : `₵${formatCurrency(shippingPrice)}`}
+                            ? "N/A"
+                            : `₵${formatCurrency(shippingPrice)}`}
                       </span>
                     </div>
                     <div className="border-t border-gray-200 pt-2 flex justify-between items-center">
                       <span className="font-bold text-gray-900">Total</span>
-                      <span className="text-lg font-extrabold text-emerald-700">
-                        ₵{formatCurrency(totalPrice)}
-                      </span>
+                      <div className="text-right">
+                        <span className="text-lg font-extrabold text-emerald-700">
+                          ₵{formatCurrency(totalPrice)}
+                        </span>
+                        {shippingPrice === null && (
+                          <span className="block text-[10px] text-amber-600 font-medium">
+                            + shipping fee excluded
+                          </span>
+                        )}
+                      </div>
                     </div>
+                    {/* ✅ Updated mobile info message */}
                     {shippingPrice === null && (
                       <p className="flex items-start gap-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2 mt-1">
                         <Info
                           size={12}
                           className="text-amber-500 mt-0.5 flex-shrink-0"
                         />
-                        Shipping confirmed by seller
+                        <span>
+                          Delivery fee will be provided by the seller
+                          {customLocation.trim()
+                            ? ` for "${customLocation.trim()}"`
+                            : ""}
+                        </span>
                       </p>
                     )}
                   </div>
@@ -868,6 +909,7 @@ const CheckoutPage = () => {
                   <>
                     <Lock size={18} /> Place Order — ₵
                     {formatCurrency(totalPrice)}
+                    {shippingPrice === null && " + shipping"}
                   </>
                 )}
               </button>
@@ -889,7 +931,6 @@ const CheckoutPage = () => {
               </div>
 
               <OrderSummaryContent />
-
             </div>
           </aside>
         </div>
@@ -912,10 +953,10 @@ const CheckoutPage = () => {
               <>
                 <Lock size={16} /> Place Order — ₵
                 {formatCurrency(totalPrice)}
+                {shippingPrice === null && " + shipping"}
               </>
             )}
           </button>
-        
         </div>
       </div>
     </div>

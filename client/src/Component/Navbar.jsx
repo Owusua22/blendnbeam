@@ -60,13 +60,15 @@ const Navbar = () => {
 
   const dropdownRef = useRef(null);
   const userMenuRef = useRef(null);
-  const searchRef = useRef(null);
+  const searchRef = useRef(null); // desktop search container
   const mobileSearchInputRef = useRef(null);
 
+  // Fetch categories
   useEffect(() => {
     dispatch(fetchCategories());
   }, [dispatch]);
 
+  // Scroll shadow
   useEffect(() => {
     const handleScroll = () => {
       setScrolled(window.scrollY > 10);
@@ -75,30 +77,40 @@ const Navbar = () => {
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
+  // Click outside (dropdowns, user menu, desktop search suggestions)
   useEffect(() => {
     const handleClickOutside = (e) => {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
         setCategoryDropdownOpen(false);
         setHoveredCategory(null);
       }
+
       if (userMenuRef.current && !userMenuRef.current.contains(e.target)) {
         setUserMenuOpen(false);
       }
-      if (searchRef.current && !searchRef.current.contains(e.target)) {
+
+      // Only close desktop search suggestions when mobile search is NOT open
+      if (
+        !mobileSearchOpen &&
+        searchRef.current &&
+        !searchRef.current.contains(e.target)
+      ) {
         setShowSuggestions(false);
         setSearchFocused(false);
       }
     };
+
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
+  }, [mobileSearchOpen]);
 
   // Auto-focus the mobile search input when modal opens
   useEffect(() => {
     if (mobileSearchOpen && mobileSearchInputRef.current) {
-      setTimeout(() => {
-        mobileSearchInputRef.current.focus();
+      const t = setTimeout(() => {
+        mobileSearchInputRef.current?.focus();
       }, 100);
+      return () => clearTimeout(t);
     }
   }, [mobileSearchOpen]);
 
@@ -113,6 +125,35 @@ const Navbar = () => {
       document.body.style.overflow = "";
     };
   }, [mobileSearchOpen]);
+
+  // Debounced product search
+  const doSearch = useRef(
+    debounce(async (q) => {
+      if (!q || q.trim().length < 2) {
+        setSuggestions([]);
+        setShowSuggestions(false);
+        return;
+      }
+      try {
+        const res = await getProducts({ search: q.trim(), limit: 6 });
+        const results = Array.isArray(res)
+          ? res
+          : res?.data ?? res?.products ?? [];
+        setSuggestions(results.slice(0, 6));
+        setShowSuggestions(true);
+      } catch (err) {
+        console.error("Search error", err);
+        setSuggestions([]);
+        setShowSuggestions(false);
+      }
+    }, 300)
+  ).current;
+
+  // Run search when query changes
+  useEffect(() => {
+    doSearch(query);
+    setActiveSuggestionIndex(-1);
+  }, [query, doSearch]);
 
   const handleLogout = () => {
     dispatch(logout());
@@ -142,33 +183,45 @@ const Navbar = () => {
     navigate(`/category/${categoryId}`);
   };
 
-  const doSearch = useRef(
-    debounce(async (q) => {
-      if (!q || q.trim().length < 2) {
-        setSuggestions([]);
-        return;
-      }
-      try {
-        const res = await getProducts({ search: q.trim(), limit: 6 });
-        const results = Array.isArray(res)
-          ? res
-          : res?.data ?? res?.products ?? [];
-        setSuggestions(results.slice(0, 6));
-        setShowSuggestions(true);
-      } catch (err) {
-        console.error("Search error", err);
-        setSuggestions([]);
-      }
-    }, 300)
-  ).current;
+  const goToProduct = (product) => {
+    if (!product) return;
 
-  useEffect(() => {
-    doSearch(query);
-    setActiveSuggestionIndex(-1);
-  }, [query, doSearch]);
+    const productId = product._id || product.id || product.slug;
+    if (!productId) return;
+
+    setShowSuggestions(false);
+    setQuery("");
+
+    // Adjust path if your product details route is different
+    navigate(`/product/${productId}`);
+
+    closeMobileMenu();
+    closeMobileSearch();
+  };
+
+  const navigateToSearchPage = (searchTerm) => {
+    const trimmed = searchTerm.trim();
+    if (!trimmed) return;
+
+    setShowSuggestions(false);
+    setSearchFocused(false);
+    navigate(`/search?q=${encodeURIComponent(trimmed)}`);
+    closeMobileMenu();
+    closeMobileSearch();
+  };
 
   const handleKeyDown = (e) => {
-    if (!showSuggestions || suggestions.length === 0) return;
+    if (!showSuggestions || suggestions.length === 0) {
+      if (e.key === "Enter" && query.trim()) {
+        e.preventDefault();
+        navigateToSearchPage(query);
+      }
+      if (e.key === "Escape" && mobileSearchOpen) {
+        closeMobileSearch();
+      }
+      return;
+    }
+
     if (e.key === "ArrowDown") {
       e.preventDefault();
       setActiveSuggestionIndex((idx) =>
@@ -182,28 +235,13 @@ const Navbar = () => {
       const selected = suggestions[activeSuggestionIndex] ?? suggestions[0];
       if (selected) {
         goToProduct(selected);
-      } else {
+      } else if (query.trim()) {
         navigateToSearchPage(query);
       }
     } else if (e.key === "Escape") {
       setShowSuggestions(false);
       if (mobileSearchOpen) closeMobileSearch();
     }
-  };
-
-  const navigateToSearchPage = (q) => {
-    setShowSuggestions(false);
-    closeMobileSearch();
-    navigate(`/search?query=${encodeURIComponent(q)}`);
-  };
-
-  const goToProduct = (product) => {
-    setShowSuggestions(false);
-    setQuery("");
-    const idOrSlug = product.slug || product._id || product.id;
-    navigate(`/product/${idOrSlug}`);
-    closeMobileMenu();
-    closeMobileSearch();
   };
 
   const totalItems =
@@ -235,13 +273,13 @@ const Navbar = () => {
                 <div className="w-5 h-5 rounded-full bg-white/15 flex items-center justify-center group-hover:bg-white/25 transition-colors">
                   <Phone size={10} />
                 </div>
-                <span className="hidden sm:inline font-medium">
+                <span className="sm:inline font-medium">
                   +233 554 671 026
                 </span>
               </a>
               <a
                 href="mailto:info@blendandbeam.com"
-                className="hidden md:flex items-center gap-1.5 hover:text-emerald-100 transition-colors group"
+                className="flex items-center gap-1.5 hover:text-emerald-100 transition-colors group"
               >
                 <div className="w-5 h-5 rounded-full bg-white/15 flex items-center justify-center group-hover:bg-white/25 transition-colors">
                   <Mail size={10} />
@@ -250,7 +288,7 @@ const Navbar = () => {
               </a>
             </div>
 
-            <div className="flex items-center gap-5">
+            <div className="hidden md:flex items-center gap-5">
               <div className="flex items-center gap-2 bg-white/10 backdrop-blur-sm rounded-full px-3 py-1">
                 <Sparkles size={12} className="text-yellow-300 animate-pulse" />
                 <span className="font-semibold">
@@ -432,6 +470,7 @@ const Navbar = () => {
                       onClick={() => {
                         setQuery("");
                         setSuggestions([]);
+                        setShowSuggestions(false);
                       }}
                       className="p-1 rounded-full hover:bg-gray-200 transition-colors"
                     >
@@ -675,10 +714,7 @@ const Navbar = () => {
                 className="p-2 rounded-xl hover:bg-gray-100 active:bg-gray-200 transition-all"
                 title="Search"
               >
-                <Search
-                  className="h-5 w-5 text-gray-500"
-                  strokeWidth={1.8}
-                />
+                <Search className="h-5 w-5 text-gray-500" strokeWidth={1.8} />
               </button>
 
               <button
@@ -749,6 +785,7 @@ const Navbar = () => {
                   onClick={() => {
                     setQuery("");
                     setSuggestions([]);
+                    setShowSuggestions(false);
                     mobileSearchInputRef.current?.focus();
                   }}
                   className="p-1 rounded-full hover:bg-gray-100 transition-colors"
@@ -764,36 +801,6 @@ const Navbar = () => {
               <X size={20} />
             </button>
           </div>
-
-          {/* Quick Actions */}
-          {!query && !showSuggestions && (
-            <div className="px-4 py-4">
-              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
-                Popular Searches
-              </p>
-              <div className="flex flex-wrap gap-2">
-                {[
-                  "Furniture",
-                  "Lighting",
-                  "Decor",
-                  "Living Room",
-                  "Bedroom",
-                  "Kitchen",
-                ].map((term) => (
-                  <button
-                    key={term}
-                    onClick={() => {
-                      setQuery(term);
-                      mobileSearchInputRef.current?.focus();
-                    }}
-                    className="px-3 py-1.5 bg-gray-50 hover:bg-emerald-50 text-gray-600 hover:text-emerald-700 rounded-lg text-sm font-medium transition-colors border border-gray-100 hover:border-emerald-200"
-                  >
-                    {term}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
 
           {/* Search Button */}
           {query && (
@@ -830,7 +837,10 @@ const Navbar = () => {
                 {suggestions.map((p, i) => (
                   <button
                     key={p._id || p.id}
-                    onClick={() => goToProduct(p)}
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      goToProduct(p);
+                    }}
                     className={`flex items-center gap-3 w-full px-4 py-3 border-b border-gray-50 last:border-b-0 transition-all duration-150 active:bg-emerald-50 ${
                       activeSuggestionIndex === i ? "bg-emerald-50" : ""
                     }`}
@@ -913,7 +923,6 @@ const Navbar = () => {
             </div>
             <div>
               <h2 className="font-bold text-white text-lg">Blend & Beam</h2>
-              <p className="text-emerald-100 text-xs">Home & Living</p>
             </div>
           </div>
           <button
@@ -927,16 +936,6 @@ const Navbar = () => {
         {/* Tab Switcher */}
         <div className="flex bg-gray-50 p-1.5 mx-4 mt-4 rounded-xl">
           <button
-            onClick={() => setActiveSidebar("menu")}
-            className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-all duration-200 ${
-              activeSidebar === "menu"
-                ? "bg-white text-emerald-700 shadow-sm"
-                : "text-gray-500 hover:text-gray-700"
-            }`}
-          >
-            Main Menu
-          </button>
-          <button
             onClick={() => setActiveSidebar("categories")}
             className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-all duration-200 ${
               activeSidebar === "categories"
@@ -945,6 +944,16 @@ const Navbar = () => {
             }`}
           >
             Categories
+          </button>
+          <button
+            onClick={() => setActiveSidebar("menu")}
+            className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-all duration-200 ${
+              activeSidebar === "menu"
+                ? "bg-white text-emerald-700 shadow-sm"
+                : "text-gray-500 hover:text-gray-700"
+            }`}
+          >
+            Main Menu
           </button>
         </div>
 
@@ -970,7 +979,7 @@ const Navbar = () => {
               ) : (
                 <div className="p-4 mb-4 rounded-2xl bg-gradient-to-br from-emerald-50 via-teal-50 to-cyan-50 border border-emerald-100">
                   <div className="text-sm font-semibold text-gray-800 mb-1">
-                    Welcome! 👋
+                    Welcome!
                   </div>
                   <p className="text-xs text-gray-500 mb-3">
                     Sign in to access your account

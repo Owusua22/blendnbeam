@@ -1,6 +1,7 @@
 // src/App.jsx
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { useSelector } from "react-redux";
+import { useEffect } from "react";
 
 import Navbar from "./Component/Navbar";
 
@@ -24,6 +25,17 @@ import AdminLoginPage from "./Pages/AdminLogin";
 import Users from "./Pages/Admin/Users";
 import Banners from "./Pages/Admin/Banners";
 import ProfilePage from "./Pages/ProfilePage";
+
+/** Scroll to top on route change */
+function ScrollToTop() {
+  const { pathname } = useLocation();
+
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [pathname]);
+
+  return null;
+}
 
 /** Navbar wrapper: hides Navbar on admin routes */
 function NavbarGate() {
@@ -59,6 +71,7 @@ function AdminAuthGate({ children }) {
 function App() {
   return (
     <Router>
+      <ScrollToTop />
       <NavbarGate />
 
       <Routes>
@@ -70,7 +83,7 @@ function App() {
         <Route path="/customer-orders" element={<UserOrdersPage />} />
         <Route path="/cart" element={<CartPage />} />
         <Route path="/product/:id" element={<ProductDetailsPage />} />
-        <Route path= "/profile" element={<ProfilePage />} />
+        <Route path="/profile" element={<ProfilePage />} />
 
         {/* Admin auth routes (no Navbar because /admin/*) */}
         <Route

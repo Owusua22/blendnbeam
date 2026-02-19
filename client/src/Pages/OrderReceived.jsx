@@ -1,95 +1,202 @@
-import React from 'react';
-import { CheckCircle, Package, Mail, ArrowRight, Clock, Truck } from 'lucide-react';
+import React from "react";
+import { useParams, useNavigate } from "react-router-dom";
+import {
+  CheckCircle,
+  Package,
+  ArrowRight,
+  Clock,
+  Truck,
+  ShoppingBag,
+  ClipboardList,
+  Sparkles,
+  MessageCircle,
+} from "lucide-react";
 
 export default function OrderReceivedPage() {
-  const orderNumber = "ORD-" + Math.random().toString(36).substr(2, 9).toUpperCase();
-  const estimatedDelivery = new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toLocaleDateString('en-US', { 
-    weekday: 'long', 
-    month: 'long', 
-    day: 'numeric' 
+  const { id } = useParams();
+  const navigate = useNavigate();
+
+  const displayId = id
+    ? `#${id.slice(-8).toUpperCase()}`
+    : `#${Math.random().toString(36).substr(2, 8).toUpperCase()}`;
+
+  const estimatedDelivery = new Date(
+    Date.now() + 5 * 24 * 60 * 60 * 1000
+  ).toLocaleDateString("en-US", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
   });
 
+  const steps = [
+    {
+      icon: CheckCircle,
+      label: "Confirmed",
+      sub: "Order received",
+      done: true,
+      active: false,
+    },
+    {
+      icon: Clock,
+      label: "Processing",
+      sub: "Preparing items",
+      done: false,
+      active: true,
+    },
+    {
+      icon: Truck,
+      label: "Delivery",
+      sub: estimatedDelivery,
+      done: false,
+      active: false,
+    },
+  ];
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-green-50 via-yellow-50 to-green-50">
-      <div className="max-w-2xl mx-auto px-4 py-12 sm:px-6 lg:px-8">
-        {/* Success Icon */}
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-24 h-24 bg-green-100 rounded-full mb-6 animate-bounce">
-            <CheckCircle className="w-16 h-16 text-green-600" strokeWidth={2.5} />
+    <div className="min-h-screen bg-gray-50 flex items-start justify-center pt-8 sm:pt-14 pb-12 px-4">
+      <div className="w-full max-w-md">
+        {/* ─── Success Header ─── */}
+        <div className="text-center mb-6">
+          <div className="relative inline-flex items-center justify-center mb-4">
+            {/* Pulse ring */}
+            <span className="absolute w-20 h-20 rounded-full bg-emerald-100 animate-ping opacity-30" />
+            <div className="relative w-16 h-16 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-500 flex items-center justify-center shadow-lg shadow-emerald-500/25">
+              <CheckCircle size={32} className="text-white" strokeWidth={2.5} />
+            </div>
+            <div className="absolute -bottom-1 -right-1">
+              <Sparkles size={16} className="text-amber-400" />
+            </div>
           </div>
-          
-          <h1 className="text-4xl font-bold text-gray-900 mb-3">
-            Order Received!
+
+          <h1 className="text-2xl font-extrabold text-gray-900 tracking-tight">
+            Order Placed!
           </h1>
-          <p className="text-lg text-gray-600">
+          <p className="text-sm text-gray-500 mt-1">
             Thank you for your purchase
           </p>
         </div>
 
-        {/* Order Number Card */}
-        <div className="bg-white rounded-2xl shadow-lg p-8 mb-6 border-2 border-green-200">
-          <div className="flex items-center justify-between mb-6 pb-6 border-b border-gray-200">
+        {/* ─── Order Card ─── */}
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+          {/* Order ID bar */}
+          <div className="flex items-center justify-between px-5 py-3.5 bg-gradient-to-r from-emerald-50 to-teal-50 border-b border-emerald-100">
             <div>
-              <p className="text-sm text-gray-600 mb-1">Order Number</p>
-              <p className="text-2xl font-bold text-gray-900">{orderNumber}</p>
+              <p className="text-[10px] font-semibold text-emerald-600 uppercase tracking-wider">
+                Order ID
+              </p>
+              <p className="text-base font-bold text-gray-900 font-mono mt-0.5">
+                {displayId}
+              </p>
             </div>
-            <Package className="w-12 h-12 text-yellow-500" />
+            <div className="w-10 h-10 rounded-xl bg-white border border-emerald-100 flex items-center justify-center shadow-sm">
+              <Package size={20} className="text-emerald-600" />
+            </div>
           </div>
 
-          {/* Status Timeline */}
-          <div className="space-y-4">
-            <div className="flex items-start">
-              <div className="flex-shrink-0 w-10 h-10 bg-green-500 rounded-full flex items-center justify-center">
-                <CheckCircle className="w-6 h-6 text-white" />
+          {/* ─── Progress Steps ─── */}
+          <div className="px-5 py-5">
+            <div className="flex items-start justify-between relative">
+              {/* Connector line */}
+              <div className="absolute top-5 left-[10%] right-[10%] h-[2px] bg-gray-200 z-0">
+                <div className="h-full w-1/3 bg-emerald-500 rounded-full" />
               </div>
-              <div className="ml-4 flex-1">
-                <p className="font-semibold text-gray-900">Order Confirmed</p>
-                <p className="text-sm text-gray-600">Your order has been received and confirmed</p>
-              </div>
-            </div>
 
-            <div className="flex items-start">
-              <div className="flex-shrink-0 w-10 h-10 bg-yellow-400 rounded-full flex items-center justify-center">
-                <Clock className="w-6 h-6 text-white" />
-              </div>
-              <div className="ml-4 flex-1">
-                <p className="font-semibold text-gray-900">Processing</p>
-                <p className="text-sm text-gray-600">We're preparing your items for shipment</p>
-              </div>
+              {steps.map((step, idx) => {
+                const Icon = step.icon;
+                return (
+                  <div
+                    key={idx}
+                    className="relative z-10 flex flex-col items-center text-center flex-1"
+                  >
+                    <div
+                      className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${
+                        step.done
+                          ? "bg-emerald-500 shadow-md shadow-emerald-500/20"
+                          : step.active
+                            ? "bg-amber-400 shadow-md shadow-amber-400/20 animate-pulse"
+                            : "bg-gray-100 border-2 border-gray-200"
+                      }`}
+                    >
+                      <Icon
+                        size={18}
+                        className={
+                          step.done || step.active
+                            ? "text-white"
+                            : "text-gray-400"
+                        }
+                        strokeWidth={2.5}
+                      />
+                    </div>
+                    <p
+                      className={`text-xs font-semibold mt-2 ${
+                        step.done
+                          ? "text-emerald-700"
+                          : step.active
+                            ? "text-amber-700"
+                            : "text-gray-400"
+                      }`}
+                    >
+                      {step.label}
+                    </p>
+                    <p className="text-[10px] text-gray-400 mt-0.5 leading-tight">
+                      {step.sub}
+                    </p>
+                  </div>
+                );
+              })}
             </div>
+          </div>
 
-            <div className="flex items-start">
-              <div className="flex-shrink-0 w-10 h-10 bg-gray-200 rounded-full flex items-center justify-center">
-                <Truck className="w-6 h-6 text-gray-500" />
-              </div>
-              <div className="ml-4 flex-1">
-                <p className="font-semibold text-gray-600">Estimated Delivery</p>
-                <p className="text-sm text-gray-600">{estimatedDelivery}</p>
-              </div>
-            </div>
+          {/* ─── Info Note ─── */}
+          <div className="mx-5 mb-5 flex items-start gap-2.5 p-3 rounded-xl bg-amber-50 border border-amber-100">
+            <Clock size={14} className="text-amber-500 mt-0.5 flex-shrink-0" />
+            <p className="text-xs text-amber-700 leading-relaxed">
+              You'll receive updates as your order progresses. Check your
+              orders page for real-time status.
+            </p>
           </div>
         </div>
 
-       
-
-        {/* Action Buttons */}
-        <div className="space-y-3">
-          <button className="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-4 px-6 rounded-xl shadow-lg transition duration-200 flex items-center justify-center group">
-            Track Your Order
-            <ArrowRight className="ml-2 w-5 h-5 group-hover:translate-x-1 transition-transform" />
+        {/* ─── Action Buttons ─── */}
+        <div className="mt-5 space-y-2.5">
+          <button
+            onClick={() => navigate("/customer-orders")}
+            className="group w-full flex items-center justify-center gap-2.5 py-3.5 
+              bg-gray-900 text-white font-bold text-sm rounded-2xl shadow-lg 
+              shadow-gray-900/10 hover:bg-gray-800 active:scale-[0.98] transition-all"
+          >
+            <ClipboardList size={17} />
+            Track Your Orders
+            <ArrowRight
+              size={15}
+              className="opacity-60 group-hover:opacity-100 group-hover:translate-x-0.5 transition-all"
+            />
           </button>
-          
-          <button className="w-full bg-white hover:bg-gray-50 text-gray-800 font-semibold py-4 px-6 rounded-xl shadow border-2 border-gray-200 transition duration-200">
+
+          <button
+            onClick={() => navigate("/")}
+            className="w-full flex items-center justify-center gap-2 py-3 
+              bg-white text-gray-700 font-semibold text-sm rounded-2xl 
+              border-2 border-gray-200 hover:border-gray-300 hover:bg-gray-50 
+              active:scale-[0.98] transition-all"
+          >
+            <ShoppingBag size={16} />
             Continue Shopping
           </button>
         </div>
 
-        {/* Footer Note */}
-        <div className="mt-8 text-center">
-          <p className="text-sm text-gray-600">
-            Need help? <span className="text-green-600 font-semibold cursor-pointer hover:underline">Contact Support</span>
-          </p>
-        </div>
+        {/* ─── Footer ─── */}
+        <p className="mt-6 text-center text-xs text-gray-400">
+          Need help?{" "}
+          <button
+            onClick={() => navigate("/contact")}
+            className="inline-flex items-center gap-1 text-emerald-600 font-semibold 
+              hover:underline underline-offset-2"
+          >
+            <MessageCircle size={11} />
+            Contact Support
+          </button>
+        </p>
       </div>
     </div>
   );
